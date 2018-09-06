@@ -1,0 +1,4 @@
+.paket
+**/bin/*
+**/obj/*
+**/packages/*

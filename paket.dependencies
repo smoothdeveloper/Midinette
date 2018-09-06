@@ -1,0 +1,5 @@
+source https://nuget.org/api/v2
+redirects: on
+generate_load_scripts: on
+
+nuget FSharp.Core = 4.1.17
