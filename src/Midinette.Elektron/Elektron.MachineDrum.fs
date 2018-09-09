@@ -510,12 +510,13 @@ type MDKit(bytes: byte array) =
   member x.data = bytes
   member x.Position = bytes.[0x09]
   
-  // FABLE TODO
-  (*
+  
+  #if FABLE_COMPILER
+  #else
   member x.Name     
     with get ()         = getDataSlice 0x0a 16 |> ASCIIEncoding.Default.GetString
     and set (v: string) = setDataSlice 0x0a 16 (ASCIIEncoding.Default.GetBytes v)
-  *)
+  #endif
   member x.ReverbSettings = ReverbSettings bytes
   member x.DelaySettings = DelaySettings bytes
   member x.EqualizerSettings = EqualizerSettings bytes
@@ -538,12 +539,12 @@ type MDKit(bytes: byte array) =
 
         let isUwDefined b =
           // TODO FABLE
-           //Enum.IsDefined(typeof<MDUWMachine>, b)
-           failwithf "%i" b
+          Enum.IsDefined(typeof<MDUWMachine>, b)
+          // failwithf "%i" b
         let isMdDefined b =
           // TODO FABLE
-          //Enum.IsDefined(typeof<MDMachine>, b)
-          failwithf "%i" b
+          Enum.IsDefined(typeof<MDMachine>, b)
+          //failwithf "%i" b
         if isUW && isUwDefined b then
           MDUW (LanguagePrimitives.EnumOfValue(b) : MDUWMachine)
         elif (not isUW) && isMdDefined b then
@@ -917,20 +918,25 @@ module Sysex =
       0x00uy
     |]
 
-type MachineDrum(inPort: IMidiInput, outPort: IMidiOutput) =
-  let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) (inPort: IMidiInput) : Async<MachineDrumSysexResponses option> =
-    //  Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> sysex.[0..5] = Sysex.mdHeader && sysex.[6] = request.ResponseMessageId) request.BuildResponse inPort
+type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
+  let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) (inPort: IMidiInput<_>) : Async<MachineDrumSysexResponses option> =
+  #if FABLE_COMPILER
     failwithf "TODO FABLE"
+  #else
+    Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> sysex.[0..5] = Sysex.mdHeader && sysex.[6] = request.ResponseMessageId) request.BuildResponse inPort
+  #endif
 
   let performSysExRequest (requestMessage: MachineDrumSysexRequests) =
     if requestMessage.ExpectResponses then
-      (*let task = 
+  #if FABLE_COMPILER  
+      helpGetMDSysex 5 (TimeSpan.FromMilliseconds(2000.)) requestMessage inPort |> Async.RunSynchronously  
+  #else
+      let task = 
         helpGetMDSysex 5 (TimeSpan.FromMilliseconds(2000.)) requestMessage inPort
         |> Async.StartAsTask
       requestMessage.Sysex |> outPort.WriteSysex 0
-      task.Result*)
-      // TODO FABLE
-      helpGetMDSysex 5 (TimeSpan.FromMilliseconds(2000.)) requestMessage inPort |> Async.RunSynchronously
+      task.Result
+#endif
     else
       None
   member x.MidiOutPort = inPort
@@ -1012,12 +1018,12 @@ type TimestampedMessage<'t> = {
   Message: 't
 }
 
-type MachineDrumEventListener(md: MachineDrum) =
+type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
   let (Some mdGlobalSettings) = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
   let event = new Event<_>()
-  let onChannelMessage (midiEvent: MidiEvent) =
+  let onChannelMessage (midiEvent: MidiEvent<_>) =
     (*match lastKit.Message with
     | None -> lastKit <- { Timestamp = midiEvent.Timestamp; Message = md.CurrentKitIndex }
     | _ -> ()*)
@@ -1112,11 +1118,10 @@ type MachineDrumEventListener(md: MachineDrum) =
     { Timestamp = m.Timestamp; Message = message } |> event.Trigger
   )
   let sysexListener = midiIn.SysexReceived.Subscribe(fun m -> 
-    failwithf "no PORTMIDI RUNTIME"
     // TODO TODO
-    (*let timestamp = Midi.Runtime.ptGetTime.Invoke(IntPtr.Zero)
+    let timestamp = getTimestamp()
     let message = onSysexMessage m
-    { Timestamp = timestamp; Message = message } |> event.Trigger*)
+    { Timestamp = timestamp; Message = message } |> event.Trigger
   )
   interface IDisposable with
     member x.Dispose() = 

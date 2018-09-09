@@ -3,7 +3,7 @@ module Midi.Registers
 open Midi
 open System.Collections.Generic
 
-type MidiChannelState =
+type MidiChannelState<'timestamp> =
   val seenControllers         : HashSet<byte>
   val controllers             : byte array
   val activeNotes             : HashSet<byte>
@@ -36,16 +36,15 @@ type MidiChannelState =
     this.activeNotes.Remove note |> ignore
     this.notes.[int note] <- velocity, timestamp
 
-  member this.UpdateWithEvent (m: MidiEvent) =
+  member this.UpdateWithEvent (m: MidiEvent<_>) =
     let message = m.Message
-    let channelState = this
     match message.MessageType with
-    | MidiMessageType.ProgramChange    -> channelState.program <- message.Data1
-    | MidiMessageType.ChannelPressure  -> channelState.channelPressure <- message.Data1
-    | MidiMessageType.ControllerChange -> channelState.NoticeControllerChange message.Data1 message.Data2
-    | MidiMessageType.PitchBendChange  -> channelState.pitchBend <- ((int16 message.Data2) <<< 7) ||| (int16 message.Data1)
-    | MidiMessageType.NoteOn           -> channelState.NoticeNoteOn message.Data1 message.Data2 m.Timestamp
-    | MidiMessageType.NoteOff          -> channelState.NoticeNoteOff message.Data1 message.Data2 m.Timestamp
+    | MidiMessageType.ProgramChange    -> this.program <- message.Data1
+    | MidiMessageType.ChannelPressure  -> this.channelPressure <- message.Data1
+    | MidiMessageType.ControllerChange -> this.NoticeControllerChange message.Data1 message.Data2
+    | MidiMessageType.PitchBendChange  -> this.pitchBend <- ((int16 message.Data2) <<< 7) ||| (int16 message.Data1)
+    | MidiMessageType.NoteOn           -> this.NoticeNoteOn message.Data1 message.Data2 m.Timestamp
+    | MidiMessageType.NoteOff          -> this.NoticeNoteOff message.Data1 message.Data2 m.Timestamp
     | _ -> ()
 
 
@@ -58,16 +57,16 @@ type ISysexInputState =
  
 
 
-type IMidiPlatform<'device, 'event> =
+type IMidiPlatform<'device, 'event, 'timestamp> =
   //abstract member GetMidiInput: device: 'device -> IMidiInput option
   //abstract member GetMidiOutput: device: 'device -> IMidiOutput option
   [<CLIEvent>] abstract member Error : IEvent<'device * string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<'device * MidiEvent>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<'device * MidiEvent>
+  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<'device * MidiEvent<'timestamp>>
+  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<'device * MidiEvent<'timestamp>>
   [<CLIEvent>] abstract member SysexReceived : IEvent<'device * byte array>
   [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<'device * 'event>
 
-type MidiPlatformTrigger<'device, 'event>() =
+type MidiPlatformTrigger<'device, 'event, 'timestamp>() =
   let error                   = new Event<_>()
   let realtimeMessageReceived = new Event<_>()
   let sysexReceived           = new Event<_>()
@@ -78,7 +77,7 @@ type MidiPlatformTrigger<'device, 'event>() =
   member x.NoticeSysex(d, m) = sysexReceived.Trigger (d,m)
   member x.NoticeSystemMessage(d, m) = systemMessageReceived.Trigger(d,m)
   member x.NoticeChannelMessage(d, m) = channelMessageReceived.Trigger(d,m)
-  interface IMidiPlatform<'device, 'event> with
+  interface IMidiPlatform<'device, 'event, 'timestamp> with
     //member x.GetMidiInput d = getMidiInput d
     //member x.GetMidiOutput d = getMidiOutput d
     [<CLIEvent>] member x.Error = error.Publish
@@ -97,12 +96,12 @@ module PlatformImplHelp =
     |> byte
     |> LanguagePrimitives.EnumOfValue 
 
-  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_,_>)=
+  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_,_,_>)=
     if sysexState.SysexData.Length > 5 then
       (deviceInfo, sysexState.SysexData) |> platform.NoticeSysex
     sysexState.DisposeSysex ()
 
-  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_,_>)=
+  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_,_,_>)=
     let mutable endEncountered = false
     for i in 0 .. 3 do
       if not endEncountered then
@@ -113,7 +112,7 @@ module PlatformImplHelp =
           completeSysex deviceInfo sysexInput platform
           endEncountered <- true
   
-  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_,_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
+  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_,_,_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
     let deviceInfo = getDeviceInfo device
     let sysexInputState : ISysexInputState = getSysexInputState device
   

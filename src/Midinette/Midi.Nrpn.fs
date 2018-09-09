@@ -35,7 +35,7 @@ module Nrpn =
     let paramNumMSB = 127uy
     let paramNumLSB = 127uy
     let mutable firstMessageTimestamp = 0
-    let messages = ResizeArray<MidiEvent> 4
+    let messages = ResizeArray<MidiEvent<_>> 4
     let nrpnEvent = Event<_>()
     let mutable subscription = Unchecked.defaultof<System.IDisposable>
 
@@ -44,7 +44,7 @@ module Nrpn =
       messages.Clear()
 
     let push (startIndex: int) (endIndex: int) =
-      let getBytes (e: MidiEvent) = e.Message.Data1, e.Message.Data2
+      let getBytes (e: MidiEvent<_>) = e.Message.Data1, e.Message.Data2
       let messages = [|
         for i in startIndex .. endIndex do
           yield messages.[i]
@@ -102,7 +102,7 @@ module Nrpn =
         checkQueue timestamp
         clear()
 
-    let keepMessage (e: MidiEvent) =
+    let keepMessage (e: MidiEvent<_>) =
       if messages.Count = 0 then firstMessageTimestamp <- e.Timestamp
       messages.Add e
     
@@ -118,7 +118,7 @@ module Nrpn =
       member x.Dispose() = subscription.Dispose()
     [<CLIEvent>] member x.NRPN = nrpnEvent.Publish
   
-    member x.NoticeMessage (e: MidiEvent) =
+    member x.NoticeMessage (e: MidiEvent<_>) =
     
       clearIfExpired (e.Timestamp)
       match e.Message with

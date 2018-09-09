@@ -14,7 +14,7 @@ module Sysex =
     0xf7uy
     |]
 
-  let helpGetSysex maxMessage (timeout: TimeSpan) sysexIsMatching buildResponse (inPort: #IMidiInput) =
+  let helpGetSysex maxMessage (timeout: TimeSpan) sysexIsMatching buildResponse (inPort: IMidiInput<_>) =
     let mutable response = None
     let mutable count = 0
     let rec noticeSysex (sysex: byte array) =
@@ -42,9 +42,9 @@ module Sysex =
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
     |]
 
-  type DetectedDevice = DetectedDevice of responseData: byte array * deviceOutput: IMidiInput * deviceInput: IMidiOutput
+  type DetectedDevice<'timestamp> = DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
 
-  let deviceInquiry (inputPorts: #IMidiInput array) (outputPorts: #IMidiOutput array) sysexMatcher doWithOutput withInputAndOutput =
+  let deviceInquiry (inputPorts: IMidiInput<_> array) (outputPorts: IMidiOutput<_> array) sysexMatcher doWithOutput withInputAndOutput =
     let detectedPairs = [|
       let sysexInputTimeout = System.TimeSpan.FromSeconds 5.0
       for o in outputPorts do

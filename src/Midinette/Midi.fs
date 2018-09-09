@@ -104,7 +104,7 @@ type [<Struct>] MidiMessage private(value:int) =
     else
       sprintf "%A %i %i" ((x.Status |> LanguagePrimitives.EnumOfValue): MidiMessageType) x.Data1 x.Data2
 
-type [<Struct>] MidiEvent (message: MidiMessage, timestamp: int) =
+type [<Struct>] MidiEvent<'timestamp> (message: MidiMessage, timestamp: 'timestamp) =
   member __.Message = message
   member __.Timestamp = timestamp
 
@@ -112,25 +112,25 @@ type IDeviceInfo =
   abstract member Name     : string
   abstract member DeviceId : int
 
-type IMidiInput =
+type IMidiInput<'timestamp> =
   [<CLIEvent>] abstract member Error : IEvent<string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<MidiEvent>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<MidiEvent>
+  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<MidiEvent<'timestamp>>
+  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<MidiEvent<'timestamp>>
   [<CLIEvent>] abstract member SysexReceived : IEvent<byte array>
-  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<MidiEvent>
+  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<MidiEvent<'timestamp>>
   abstract member Open: bufferSize:int -> unit
   abstract member Close: unit -> unit
   abstract member DeviceInfo : IDeviceInfo
 
-type IMidiOutput =
-  abstract member WriteMessage: timestamp:int -> midiMessage:MidiMessage -> unit
-  abstract member WriteMessages: timestamp:int -> midiMessages:MidiMessage array -> unit
-  abstract member WriteSysex: timestamp:int -> data:byte array -> unit
+type IMidiOutput<'timestamp> =
+  abstract member WriteMessage: timestamp:'timestamp -> midiMessage:MidiMessage -> unit
+  abstract member WriteMessages: timestamp:'timestamp -> midiMessages:MidiMessage array -> unit
+  abstract member WriteSysex: timestamp:'timestamp -> data:byte array -> unit
   abstract member Open: bufferSize:int -> latency: int -> unit
   abstract member Close: unit -> unit
   abstract member DeviceInfo : IDeviceInfo
-
+(*
 module MidiProgram =
-  let change channel program (output: #IMidiOutput) =
+  let change channel program (output: IMidiOutput<'timestamp>) =
     MidiMessage.EncodeChannelMessage MidiMessageType.ProgramChange channel program 0uy
-    |> output.WriteMessage 0
+    |> output.WriteMessage 0*)

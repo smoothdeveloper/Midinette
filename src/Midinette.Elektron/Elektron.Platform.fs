@@ -50,17 +50,12 @@ let setSlice  s l (a: _ array) (values: _ array) =
   for i in 0 .. (l - 1) do
     a.[s + i] <- values.[i]
 let toBigEndian (v:int32) =
-  // FABLE TODO
-  (*
-  #if FABLE
-  *)
+  #if FABLE_COMPILER
   failwith "toBigEndian not implemented"
-  (*
   #else
-
   System.Net.IPAddress.HostToNetworkOrder v
   #endif
-  *)
+  
 
 let fourBytesToBigEndianInt b = BitConverter.ToInt32 (b, 0) |> toBigEndian
 
