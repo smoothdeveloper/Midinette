@@ -1,5 +1,16 @@
 source https://nuget.org/api/v2
+storage: none
 redirects: on
 generate_load_scripts: on
 
-nuget FSharp.Core = 4.1.17
+clitool dotnet-fable
+
+nuget Fable.Core
+nuget Fable.Import.Browser
+nuget Fable.Import.WebMIDI
+nuget FSharp.Core
+
+group Build
+  source https://nuget.org/api/v2
+  framework >= net461
+  #nuget FAKE
