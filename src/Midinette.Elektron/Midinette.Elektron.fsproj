@@ -4,11 +4,12 @@
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Midi.fs" />
-    <Compile Include="Midi.MessageMatching.fs" />
-    <Compile Include="Midi.Nrpn.fs" />
-    <Compile Include="Midi.Registers.fs" />
-    <Compile Include="Midi.Sysex.fs" />
+    <Compile Include="Elektron.fs" />
+    <Compile Include="Elektron.Platform.fs" />
+    <Compile Include="Elektron.MachineDrum.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Midinette\Midinette.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
