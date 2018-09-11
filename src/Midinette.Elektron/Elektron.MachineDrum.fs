@@ -1,5 +1,5 @@
 module Elektron.MachineDrum
-//open PortMidi
+
 open Elektron
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
@@ -167,6 +167,7 @@ with
     | 12uy -> FilterBaseFrequency| 13uy -> FilterWidth       | 14uy -> FilterQ           | 15uy -> SampleRateReduction
     | 16uy -> Distortion         | 17uy -> Volume            | 18uy -> Pan               | 19uy -> DelaySend          
     | 20uy -> ReverbSend         | 21uy -> LFOSpeed          | 22uy -> LFOAmount         | 23uy -> LFOShapeMix        
+    | v -> failwithf "unknown md track paramter: %i" v
   static member getCCOffset =
     function
     | MachineParameter1   -> 00uy | MachineParameter2 -> 01uy | MachineParameter3 -> 02uy | MachineParameter4   -> 03uy
@@ -205,7 +206,7 @@ with
     | 37uy | 61uy | 93uy | 117uy -> LFOSpeed
     | 38uy | 62uy | 94uy | 118uy -> LFOAmount
     | 39uy | 63uy | 95uy | 119uy -> LFOShapeMix
-
+    | v -> failwithf "unknown md track paramter for cc: %i" v
 type MDMachineSettings(bytes: byte array, offset: int, machineType: MDMachineType) =
   let baseAddress = 0x1a + (offset * 24)
   member x.SynthesisParameters = getSlice baseAddress 8 bytes
@@ -316,7 +317,7 @@ with
     | 5uy -> FilterWidth
     | 6uy -> Mono
     | 7uy -> Level
-
+    | v -> failwithf "unknown delay paramter: %i" v
 [<RequireQualifiedAccess>]
 type ReverbParameter =
 | DelayLevel
@@ -349,6 +350,7 @@ with
     | 5uy -> LowPass
     | 6uy -> GateTime
     | 7uy -> Level
+    | v -> failwithf "unknown reverb paramter: %i" v
   static member ToByte =
     function
     | DelayLevel -> 0uy 
@@ -381,6 +383,7 @@ with
     | 5uy -> ParametericGain
     | 6uy -> ParametricQ
     | 7uy -> Gain           
+    | v -> failwithf "unknown equalizer paramter: %i" v
 
 [<RequireQualifiedAccess>]
 type CompressorParameter =
@@ -403,6 +406,7 @@ with
     | 5uy -> SideChainHighPass
     | 6uy -> OutputGain
     | 7uy -> Mix
+    | v -> failwithf "unknown compressor paramter: %i" v
 
 type EqualizerSettings(bytes: byte array) =
   let baseAddress = 0x497
@@ -1019,7 +1023,7 @@ type TimestampedMessage<'t> = {
 }
 
 type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
-  let (Some mdGlobalSettings) = md.CurrentGlobalSettings
+  let mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
   let event = new Event<_>()
@@ -1027,61 +1031,64 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
     (*match lastKit.Message with
     | None -> lastKit <- { Timestamp = midiEvent.Timestamp; Message = md.CurrentKitIndex }
     | _ -> ()*)
+    match mdGlobalSettings with
+    | None -> 
+        Unknown midiEvent.Message
+    | Some mdGlobalSettings ->
+        let message = midiEvent.Message
+        let midiBaseChannel = mdGlobalSettings.MidiBaseChannel 
+        if message.MessageType = MidiMessageType.ProgramChange && message.Channel = Some midiBaseChannel then
+          PatternChanged message.Data1
+        elif MachineDrumEventParser.isMachineDrumControlChange midiBaseChannel message then
+          let channel = message.Channel.Value
+          let cc = message.Data1
+          let trackOffset =
+            if   cc <= 39uy  then 0uy
+            elif cc <= 63uy  then 1uy
+            elif cc <= 95uy  then 2uy
+            else                  3uy
+          let midiChannelOffset = channel - midiBaseChannel
+          let track = Track.trackForValue ((midiChannelOffset * 4uy) + trackOffset)
+          let parameter = MDTrackParameter.GetParameterForCC cc
+          TrackParameter (track, parameter, message.Data2)
+        elif message.MessageType = MidiMessageType.ControllerChange && message.Data1 >= 8uy && message.Data1 <= 0xbuy then
+          let midiChannelOffset = message.Channel.Value - midiBaseChannel
       
-    let message = midiEvent.Message
-    let midiBaseChannel = mdGlobalSettings.MidiBaseChannel 
-    if message.MessageType = MidiMessageType.ProgramChange && message.Channel = Some midiBaseChannel then
-      PatternChanged message.Data1
-    elif MachineDrumEventParser.isMachineDrumControlChange midiBaseChannel message then
-      let channel = message.Channel.Value
-      let cc = message.Data1
-      let trackOffset =
-        if   cc <= 39uy  then 0uy
-        elif cc <= 63uy  then 1uy
-        elif cc <= 95uy  then 2uy
-        else                  3uy
-      let midiChannelOffset = channel - midiBaseChannel
-      let track = Track.trackForValue ((midiChannelOffset * 4uy) + trackOffset)
-      let parameter = MDTrackParameter.GetParameterForCC cc
-      TrackParameter (track, parameter, message.Data2)
-    elif message.MessageType = MidiMessageType.ControllerChange && message.Data1 >= 8uy && message.Data1 <= 0xbuy then
-      let midiChannelOffset = message.Channel.Value - midiBaseChannel
-      
-      let track =
-        match message.Data1, midiChannelOffset with
-        | 0x08uy, 0uy -> Some Track.BD
-        | 0x09uy, 0uy -> Some Track.SD
-        | 0x0auy, 0uy -> Some Track.HT
-        | 0x0buy, 0uy -> Some Track.MT
-        | 0x08uy, 1uy -> Some Track.LT
-        | 0x09uy, 1uy -> Some Track.CP
-        | 0x0auy, 1uy -> Some Track.RS
-        | 0x0buy, 1uy -> Some Track.CB
-        | 0x08uy, 2uy -> Some Track.CH
-        | 0x09uy, 2uy -> Some Track.OH
-        | 0x0auy, 2uy -> Some Track.RC
-        | 0x0buy, 2uy -> Some Track.CC
-        | 0x08uy, 3uy -> Some Track.M1
-        | 0x09uy, 3uy -> Some Track.M2
-        | 0x0auy, 3uy -> Some Track.M3
-        | 0x0buy, 3uy -> Some Track.M4
-        | _ -> None
+          let track =
+            match message.Data1, midiChannelOffset with
+            | 0x08uy, 0uy -> Some Track.BD
+            | 0x09uy, 0uy -> Some Track.SD
+            | 0x0auy, 0uy -> Some Track.HT
+            | 0x0buy, 0uy -> Some Track.MT
+            | 0x08uy, 1uy -> Some Track.LT
+            | 0x09uy, 1uy -> Some Track.CP
+            | 0x0auy, 1uy -> Some Track.RS
+            | 0x0buy, 1uy -> Some Track.CB
+            | 0x08uy, 2uy -> Some Track.CH
+            | 0x09uy, 2uy -> Some Track.OH
+            | 0x0auy, 2uy -> Some Track.RC
+            | 0x0buy, 2uy -> Some Track.CC
+            | 0x08uy, 3uy -> Some Track.M1
+            | 0x09uy, 3uy -> Some Track.M2
+            | 0x0auy, 3uy -> Some Track.M3
+            | 0x0buy, 3uy -> Some Track.M4
+            | _ -> None
 
-      match track with
-      | Some track -> TrackLevel(track, message.Data2)
-      | None -> Unknown message
+          match track with
+          | Some track -> TrackLevel(track, message.Data2)
+          | None -> Unknown message
 
-    elif message.MessageType = MidiMessageType.NoteOn && message.Channel.Value = midiBaseChannel then
-      let noteNumber = message.Data1
+        elif message.MessageType = MidiMessageType.NoteOn && message.Channel.Value = midiBaseChannel then
+          let noteNumber = message.Data1
       
-      match mdGlobalSettings.KeymapStructure.Triggers.[int noteNumber] with
-      | NoteTriggerType.NoteTriggerType(_, TriggerChannel track) ->
-        match message.Data2 with
-        | 0uy      -> TrackRelease track
-        | velocity -> TrackTrigger(track, velocity)
-      | _ -> Unknown message
-    else
-      Unknown message
+          match mdGlobalSettings.KeymapStructure.Triggers.[int noteNumber] with
+          | NoteTriggerType.NoteTriggerType(_, TriggerChannel track) ->
+            match message.Data2 with
+            | 0uy      -> TrackRelease track
+            | velocity -> TrackTrigger(track, velocity)
+          | _ -> Unknown message
+        else
+          Unknown message
 
   let onSysexMessage (sysex: byte array) =
     match sysex with
