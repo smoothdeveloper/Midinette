@@ -28,7 +28,11 @@ with
     | Hold -> 2uy
 
 
-
+module MachineSpecs =
+  let patterns = [|0uy..127uy|]
+  let kits     = [|0uy..63uy|]
+  let songs    = [|0uy..31uy|]
+  
 [<RequireQualifiedAccess>]
 type Track =
 | BD | SD | HT | MT
