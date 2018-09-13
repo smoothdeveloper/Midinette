@@ -2,11 +2,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <OutputPath>..\..\build\$(Configuration)\$(TargetFramework)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Elektron.fs" />
     <Compile Include="Elektron.Platform.fs" />
     <Compile Include="Elektron.MachineDrum.fs" />
+    <Compile Include="Elektron.MonoMachine.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Midinette\Midinette.fsproj" />

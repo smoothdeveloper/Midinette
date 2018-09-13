@@ -27,7 +27,11 @@ with
     | Hold -> 2uy
 
 
-
+module MachineSpecs =
+  let patterns = [|0uy..127uy|]
+  let kits     = [|0uy..63uy|]
+  let songs    = [|0uy..31uy|]
+  
 [<RequireQualifiedAccess>]
 type Track =
 | BD | SD | HT | MT
@@ -350,7 +354,7 @@ with
     | 5uy -> LowPass
     | 6uy -> GateTime
     | 7uy -> Level
-x    | i   -> failwithf "unknown reverb parameter %i" i
+    | i   -> failwithf "unknown reverb parameter %i" i
   static member ToByte =
     function
     | DelayLevel -> 0uy 
@@ -951,7 +955,8 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
   member x.MidiInPort = outPort
   member x.Dump dumpRequest =
     performSysExRequest dumpRequest
-
+  member x.QueryStatus statusType =
+    performSysExRequest (QueryStatus statusType)
   member x.CurrentGlobalSettingsSlot =
     match x.Dump (QueryStatus(MachineDrumStatusType.GlobalSlot)) with
     | Some (MachineDrumSysexResponses.StatusResponse(GlobalSlot, slot)) -> Some slot
@@ -1033,12 +1038,10 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
   let event = new Event<_>()
   let onChannelMessage (midiEvent: MidiEvent<_>) =
 
-    let message = midiEvent.Message
     match mdGlobalSettings with
     | None -> 
-        Unknown message
+        Unknown midiEvent.Message
     | Some mdGlobalSettings ->
-        
         let midiBaseChannel = mdGlobalSettings.MidiBaseChannel 
         if message.MessageType = MidiMessageType.ProgramChange && message.Channel = Some midiBaseChannel then
           PatternChanged message.Data1

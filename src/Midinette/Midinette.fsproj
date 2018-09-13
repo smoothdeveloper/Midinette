@@ -2,6 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <OutputPath>..\..\build\$(Configuration)\$(TargetFramework)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Midi.fs" />
