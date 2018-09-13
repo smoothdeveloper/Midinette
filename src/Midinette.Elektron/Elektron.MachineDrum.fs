@@ -1040,7 +1040,7 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
   //let mutable lastKit = {Timestamp = 0; Message = None }
   let event = new Event<_>()
   let onChannelMessage (midiEvent: MidiEvent<_>) =
-
+    let message = midiEvent.Message
     match mdGlobalSettings with
     | None -> 
         Unknown midiEvent.Message
