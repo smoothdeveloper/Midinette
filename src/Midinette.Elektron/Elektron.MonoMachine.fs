@@ -293,8 +293,8 @@ type MonoMachineTrig =
 | LFO    = 0b0100uy
 
 
-type MonoMachine(inPort: #IMidiInput, outPort: #IMidiOutput) =
-  let helpGetMonomachineSysex maxMessage (timeout: TimeSpan) (request: MonoMachineSysexRequests) (inPort: IMidiInput) =
+type MonoMachine(inPort: #IMidiInput<_>, outPort: #IMidiOutput<_>) =
+  let helpGetMonomachineSysex maxMessage (timeout: TimeSpan) (request: MonoMachineSysexRequests) (inPort: IMidiInput<_>) =
     Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> 
       sysex.[0..5] = Helpers.monoMachineHeader && Some sysex.[6] = request.ResponseMessageId) request.BuildResponse inPort
 

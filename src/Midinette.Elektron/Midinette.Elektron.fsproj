@@ -8,6 +8,7 @@
     <Compile Include="Elektron.fs" />
     <Compile Include="Elektron.Platform.fs" />
     <Compile Include="Elektron.MachineDrum.fs" />
+    <Compile Include="Elektron.MonoMachine.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Midinette\Midinette.fsproj" />

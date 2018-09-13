@@ -167,7 +167,7 @@ with
     | 12uy -> FilterBaseFrequency| 13uy -> FilterWidth       | 14uy -> FilterQ           | 15uy -> SampleRateReduction
     | 16uy -> Distortion         | 17uy -> Volume            | 18uy -> Pan               | 19uy -> DelaySend          
     | 20uy -> ReverbSend         | 21uy -> LFOSpeed          | 22uy -> LFOAmount         | 23uy -> LFOShapeMix        
-    | v -> failwithf "unknown md track paramter: %i" v
+    | v -> failwithf "unknown cc offset: %i" v
   static member getCCOffset =
     function
     | MachineParameter1   -> 00uy | MachineParameter2 -> 01uy | MachineParameter3 -> 02uy | MachineParameter4   -> 03uy
@@ -206,7 +206,7 @@ with
     | 37uy | 61uy | 93uy | 117uy -> LFOSpeed
     | 38uy | 62uy | 94uy | 118uy -> LFOAmount
     | 39uy | 63uy | 95uy | 119uy -> LFOShapeMix
-    | v -> failwithf "unknown md track paramter for cc: %i" v
+    | i   -> failwithf "unknown parameter for cc %i" i
 type MDMachineSettings(bytes: byte array, offset: int, machineType: MDMachineType) =
   let baseAddress = 0x1a + (offset * 24)
   member x.SynthesisParameters = getSlice baseAddress 8 bytes
@@ -317,7 +317,8 @@ with
     | 5uy -> FilterWidth
     | 6uy -> Mono
     | 7uy -> Level
-    | v -> failwithf "unknown delay paramter: %i" v
+    | v -> failwithf "unknown DelayParameter: %i" v
+
 [<RequireQualifiedAccess>]
 type ReverbParameter =
 | DelayLevel
@@ -350,7 +351,7 @@ with
     | 5uy -> LowPass
     | 6uy -> GateTime
     | 7uy -> Level
-    | v -> failwithf "unknown reverb paramter: %i" v
+    | i   -> failwithf "unknown reverb parameter %i" i
   static member ToByte =
     function
     | DelayLevel -> 0uy 
@@ -383,7 +384,7 @@ with
     | 5uy -> ParametericGain
     | 6uy -> ParametricQ
     | 7uy -> Gain           
-    | v -> failwithf "unknown equalizer paramter: %i" v
+    | v -> failwithf "unknown EqualizerParameter: %i" v
 
 [<RequireQualifiedAccess>]
 type CompressorParameter =
@@ -406,7 +407,7 @@ with
     | 5uy -> SideChainHighPass
     | 6uy -> OutputGain
     | 7uy -> Mix
-    | v -> failwithf "unknown compressor paramter: %i" v
+    | v -> failwithf "unknown CompressorParameter: %i" v
 
 type EqualizerSettings(bytes: byte array) =
   let baseAddress = 0x497
@@ -542,13 +543,17 @@ type MDKit(bytes: byte array) =
         let isUW = i > 127
 
         let isUwDefined b =
-          // TODO FABLE
+#if FABLE_COMPILER
+          failwithf "%i" b
+#else
           Enum.IsDefined(typeof<MDUWMachine>, b)
-          // failwithf "%i" b
+#endif
         let isMdDefined b =
-          // TODO FABLE
+#if FABLE_COMPILER
+          failwithf "%i" b
+#else
           Enum.IsDefined(typeof<MDMachine>, b)
-          //failwithf "%i" b
+#endif
         if isUW && isUwDefined b then
           MDUW (LanguagePrimitives.EnumOfValue(b) : MDUWMachine)
         elif (not isUW) && isMdDefined b then
@@ -947,7 +952,8 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
   member x.MidiInPort = outPort
   member x.Dump dumpRequest =
     performSysExRequest dumpRequest
-
+  member x.QueryStatus statusType =
+    performSysExRequest (QueryStatus statusType)
   member x.CurrentGlobalSettingsSlot =
     match x.Dump (QueryStatus(MachineDrumStatusType.GlobalSlot)) with
     | Some (MachineDrumSysexResponses.StatusResponse(GlobalSlot, slot)) -> Some slot
@@ -1023,19 +1029,17 @@ type TimestampedMessage<'t> = {
 }
 
 type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
-  let mdGlobalSettings = md.CurrentGlobalSettings
+  let mutable mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
   let event = new Event<_>()
   let onChannelMessage (midiEvent: MidiEvent<_>) =
-    (*match lastKit.Message with
-    | None -> lastKit <- { Timestamp = midiEvent.Timestamp; Message = md.CurrentKitIndex }
-    | _ -> ()*)
+
+    let message = midiEvent.Message
     match mdGlobalSettings with
     | None -> 
         Unknown midiEvent.Message
     | Some mdGlobalSettings ->
-        let message = midiEvent.Message
         let midiBaseChannel = mdGlobalSettings.MidiBaseChannel 
         if message.MessageType = MidiMessageType.ProgramChange && message.Channel = Some midiBaseChannel then
           PatternChanged message.Data1

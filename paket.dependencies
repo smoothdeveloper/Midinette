@@ -1,6 +1,6 @@
 source https://nuget.org/api/v2
 storage: none
-redirects: on
+redirects: force
 generate_load_scripts: on
 
 clitool dotnet-fable
@@ -8,7 +8,7 @@ clitool dotnet-fable
 nuget Fable.Core
 nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
-nuget FSharp.Core
+nuget FSharp.Core = 4.2.3
 
 group Build
   source https://nuget.org/api/v2
