@@ -953,6 +953,9 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
       None
   member x.MidiOutPort = inPort
   member x.MidiInPort = outPort
+  member x.QueryStatus statusType =
+    performSysExRequest (QueryStatus statusType)
+
   member x.Dump dumpRequest =
     performSysExRequest dumpRequest
   member x.QueryStatus statusType =
