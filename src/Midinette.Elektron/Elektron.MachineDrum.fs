@@ -930,8 +930,8 @@ module Sysex =
       0x00uy
     |]
 
-type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
-  let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) (inPort: IMidiInput<_>) : Async<MachineDrumSysexResponses option> =
+type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNowTimestamp: unit -> int) =
+  let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) inPort : Async<MachineDrumSysexResponses option> =
   #if FABLE_COMPILER
     failwithf "TODO FABLE"
   #else
@@ -940,13 +940,14 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
 
   let performSysExRequest (requestMessage: MachineDrumSysexRequests) =
     if requestMessage.ExpectResponses then
+      let timeout = TimeSpan.FromMilliseconds(2000.)
   #if FABLE_COMPILER  
-      helpGetMDSysex 5 (TimeSpan.FromMilliseconds(2000.)) requestMessage inPort |> Async.RunSynchronously  
+      helpGetMDSysex 5 timeout requestMessage inPort |> Async.RunSynchronously  
   #else
       let task = 
-        helpGetMDSysex 5 (TimeSpan.FromMilliseconds(2000.)) requestMessage inPort
+        helpGetMDSysex 5 timeout requestMessage inPort
         |> Async.StartAsTask
-      requestMessage.Sysex |> outPort.WriteSysex 0
+      requestMessage.Sysex |> outPort.WriteSysex (getSysexNowTimestamp())
       task.Result
 #endif
     else
@@ -958,8 +959,6 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
 
   member x.Dump dumpRequest =
     performSysExRequest dumpRequest
-  member x.QueryStatus statusType =
-    performSysExRequest (QueryStatus statusType)
   member x.CurrentGlobalSettingsSlot =
     match x.Dump (QueryStatus(MachineDrumStatusType.GlobalSlot)) with
     | Some (MachineDrumSysexResponses.StatusResponse(GlobalSlot, slot)) -> Some slot
@@ -988,7 +987,7 @@ type MachineDrum(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
 
   member x.AssignMachine track machine mode =
     (AssignMachine (track, machine, mode)).Sysex
-    |> outPort.WriteSysex 0
+    |> outPort.WriteSysex (getSysexNowTimestamp())
 
 (*
   member x.DumpKit kit =
@@ -1034,7 +1033,7 @@ type TimestampedMessage<'t> = {
   Message: 't
 }
 
-type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
+type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
   let mutable mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
@@ -1131,7 +1130,7 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp) =
 
   let channelMessageListener = midiIn.ChannelMessageReceived.Subscribe(fun m ->
     let message = onChannelMessage m
-    { Timestamp = m.Timestamp; Message = message } |> event.Trigger
+    { Timestamp = (m.Timestamp); Message = message } |> event.Trigger
   )
   let sysexListener = midiIn.SysexReceived.Subscribe(fun m -> 
     // TODO TODO
