@@ -31,6 +31,8 @@ module MachineSpecs =
   let patterns = [|0uy..127uy|]
   let kits     = [|0uy..63uy|]
   let songs    = [|0uy..31uy|]
+
+
   
 [<RequireQualifiedAccess>]
 type Track =
@@ -681,7 +683,7 @@ with
 
 type TriggerType =
 | TriggerChannel of Track
-| TriggerPattern of PatternBank * patternNumber: byte
+| TriggerPattern of PatternLocator
 | UnknownTrigger of value: byte
 
 type NoteTriggerType = NoteTriggerType of note: byte * TriggerType
@@ -708,14 +710,9 @@ type KeyMapStructure(bytes: byte array) =
     | v -> failwithf "bank %i" v
   let getTriggerType (value: byte) =
     if value < 0x10uy then   TriggerChannel (Track.trackForValue value)
-    elif value < 0x8fuy then TriggerPattern (bankForValue value, value &&& 0xfuy)
+    elif value < 0x8fuy then TriggerPattern (PatternLocator.PatternLocator(bankForValue value, value &&& 0xfuy))
     else                     UnknownTrigger (value)
-    (*
-  let getTrigger (note: byte) (value: byte)=
-    if value < 0x10uy then   TriggerChannel (note, Track.trackForValue value)
-    elif value < 0x8fuy then TriggerPattern (note, bankForValue value, value &&& 0xfuy)
-    else                     Unknown (note, value)
-    *)
+   
   let triggers =
     bytes
     |> Array.indexed
@@ -790,6 +787,8 @@ type GlobalSettings = {
   // Trig mode for keymap
 }
 with 
+  static member ToSysex globals =
+    [||]
   static member FromSysex (bytes: byte array) =
     let originalPosition = bytes.[0x09]
     let drumRoutingTable = bytes |> getSlice 0x0a 16 |> Array.map Output.FromByte
@@ -831,6 +830,7 @@ type MachineDrumSysexResponses =
 | PatternResponse of MDPattern
 | SongResponse of MDSong
 | StatusResponse of MachineDrumStatusType * byte
+//| UnknownSysexResponse of byte array
 with
   member x.MessageId =
     match x with
@@ -839,14 +839,18 @@ with
     | PatternResponse _ -> 0x67uy
     | SongResponse _ -> 0x69uy
     | StatusResponse _ -> 0x72uy
-  static member BuildResponse (bytes: byte array) =
-    match bytes.[6] with
-    | 0x50uy -> GlobalSettingsResponse (GlobalSettings.FromSysex bytes)
-    | 0x52uy -> KitResponse (MDKit bytes)
-    | 0x67uy -> PatternResponse (MDPattern bytes)
-    | 0x69uy -> SongResponse (MDSong bytes)
-    | 0x72uy -> StatusResponse (MachineDrumStatusType.FromByte bytes.[7], bytes.[8])
-    | _ -> failwithf "h:%x response not understood" bytes.[6]
+  static member BuildResponse (sysex: byte array) =
+    match sysex.[6] with
+    | 0x50uy -> Some (GlobalSettingsResponse (GlobalSettings.FromSysex sysex)             )
+    | 0x52uy -> Some (KitResponse (MDKit sysex)                                           )
+    | 0x67uy -> Some (PatternResponse (MDPattern sysex)                                   )
+    | 0x69uy -> Some (SongResponse (MDSong sysex)                                         )
+    | 0x72uy -> Some (StatusResponse (MachineDrumStatusType.FromByte sysex.[7], sysex.[8]))
+    | _ ->
+        // failwithf "h:%x response not understood" sysex.[6]
+        None 
+        //Some (UnknownSysexResponse sysex)
+        
 
 type AssignMachineMode =
 | InitSynthesis
@@ -920,6 +924,40 @@ with
       | SetReverbParameter(parameter, value) -> [|ReverbParameter.ToByte parameter;value|]
     Elektron.Platform.SysexHelper.makeMachineDrumSysexMessage (Array.concat ([|x.MessageId |> Array.singleton; data|]))
 
+type LFOEvent =
+| AssignTrack       of Track
+| AssignDestination of MDTrackParameter
+| AssignShape1      of LFOShape
+| AssignShape2      of LFOShape
+| AssignType        of LFOType
+
+type MachineDrumEvent =
+| TrackLevel        of Track * value: byte
+| TrackParameter    of Track * MDTrackParameter * value: byte
+| TrackTrigger      of Track * velocity: byte
+| TrackRelease      of Track
+| PatternChanged    of byte
+| LFOSetting        of Track * LFOEvent
+| DelaySetting      of DelayParameter * value: byte
+| ReverbSetting     of ReverbParameter * value: byte
+| EqualizerSetting  of EqualizerParameter * value: byte
+| CompressorSetting of CompressorParameter * value: byte
+| Unknown           of MidiMessage
+| MachineDrumSysex  of MachineDrumSysexResponses
+| Sysex             of byte array
+| KitChanged        of byte
+with
+    member x.Track =
+        match x with
+        | TrackLevel (track, _) 
+        | TrackParameter(track,_,_)
+        | TrackTrigger(track, _)
+        | TrackRelease track
+        | LFOSetting(track, _)
+            -> Some track
+        | _ -> None
+
+
 module Sysex =
   let mdHeader = [|
       0xf0uy
@@ -930,12 +968,17 @@ module Sysex =
       0x00uy
     |]
 
+[<RequireQualifiedAccess>]
+type MidiOutputData =
+| Message of MidiMessage
+| Sysex of bytes: byte array
+
 type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNowTimestamp: unit -> int) =
   let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) inPort : Async<MachineDrumSysexResponses option> =
   #if FABLE_COMPILER
     failwithf "TODO FABLE"
   #else
-    Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> sysex.[0..5] = Sysex.mdHeader && sysex.[6] = request.ResponseMessageId) request.BuildResponse inPort
+    Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> sysex.[0..5] = Sysex.mdHeader && sysex.[6] = request.ResponseMessageId) (request.BuildResponse >> Option.get) inPort
   #endif
 
   let performSysExRequest (requestMessage: MachineDrumSysexRequests) =
@@ -952,13 +995,65 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
 #endif
     else
       None
-  member x.MidiOutPort = inPort
-  member x.MidiInPort = outPort
-  member x.QueryStatus statusType =
-    performSysExRequest (QueryStatus statusType)
 
-  member x.Dump dumpRequest =
-    performSysExRequest dumpRequest
+
+  member x.MidiOutPort = inPort
+  member x.MidiInPort  = outPort
+   
+  member x.EventToMidiMessages (mdEvent: MachineDrumEvent) globals =
+      let channel = globals.MidiBaseChannel
+      //globals.KeymapStructure.GetTriggerNotesForBank
+      let track = mdEvent.Track
+      let note = 
+          match track with
+          | Some track -> globals.KeymapStructure.GetTriggerNoteForChannel track
+          | None -> None
+
+      let makeNote note velocity isOn =
+          match note with
+          | None      -> None
+          | Some note -> 
+              if isOn then
+                  Some (MidiOutputData.Message (MidiMessage.NoteOn channel note velocity))
+              else
+                  Some (MidiOutputData.Message (MidiMessage.NoteOff channel note velocity))
+
+      let makeProgramChange program =
+        MidiMessage.ProgramChange channel program
+        |> MidiOutputData.Message
+        
+      let none = Array.empty
+      let some = Array.singleton
+      match mdEvent with
+      | TrackTrigger(track, velocity)            -> makeNote note velocity true  |> Option.get |> some
+      | TrackRelease(track)                      -> makeNote note 0uy      false |> Option.get |> some
+      | TrackLevel(track, level)                 -> none
+      | TrackParameter(track, parameter, value)  -> none
+      | PatternChanged pattern                   -> none
+      | Unknown message                          -> message    |> MidiOutputData.Message |> some
+      | Sysex data                               -> data       |> MidiOutputData.Sysex   |> some
+      | MachineDrumSysex sysex                   -> none
+      | KitChanged kit                           -> makeProgramChange kit |> some
+      | _ -> none
+          
+
+  
+  member x.SendEvents mdGlobals mdEvents getNow =
+      match mdGlobals with
+      | Some globals -> 
+          let now = getNow ()
+          for timestamp, mdEvent in mdEvents do
+              x.EventToMidiMessages mdEvent globals 
+              |> Array.iter (
+                function
+                | MidiOutputData.Message message -> outPort.WriteMessage (timestamp + now) message
+                | MidiOutputData.Sysex sysex     -> outPort.WriteSysex now sysex
+              )
+      | None -> ()
+
+  member x.QueryStatus statusType = performSysExRequest (QueryStatus statusType)
+
+  member x.Dump dumpRequest = performSysExRequest dumpRequest
   member x.CurrentGlobalSettingsSlot =
     match x.Dump (QueryStatus(MachineDrumStatusType.GlobalSlot)) with
     | Some (MachineDrumSysexResponses.StatusResponse(GlobalSlot, slot)) -> Some slot
@@ -989,7 +1084,11 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
     (AssignMachine (track, machine, mode)).Sysex
     |> outPort.WriteSysex (getSysexNowTimestamp())
 
-(*
+   member x.ChangeTrackParameter globals track parameter value =
+    let cc = MDTrackParameter.GetCCForTrack parameter track    
+    MidiMessage.CC (globals.MidiBaseChannel) cc value
+    |> outPort.WriteMessage (getSysexNowTimestamp())
+(*  
   member x.DumpKit kit =
     performSysExRequest (DumpKit kit)
 
@@ -1005,35 +1104,18 @@ module MachineDrumEventParser =
     message.MessageType = MidiMessageType.ControllerChange 
     && isMachineDrumChannel midiBaseChannel message.Channel.Value
     && (message.Data1 >= 16uy && message.Data1 <= 119uy)
-
-type LFOEvent =
-| AssignTrack       of Track
-| AssignDestination of MDTrackParameter
-| AssignShape1      of LFOShape
-| AssignShape2      of LFOShape
-| AssignType        of LFOType
-
-type MachineDrumEvent =
-| TrackLevel        of Track * value: byte
-| TrackParameter    of Track * MDTrackParameter * value: byte
-| TrackTrigger      of Track * velocity: byte
-| TrackRelease      of Track
-| PatternChanged    of byte
-| LFOSetting        of Track * LFOEvent
-| DelaySetting      of DelayParameter * value: byte
-| ReverbSetting     of ReverbParameter * value: byte
-| EqualizerSetting  of EqualizerParameter * value: byte
-| CompressorSetting of CompressorParameter * value: byte
-| Unknown           of MidiMessage
-| MachineDrumSysex  of MachineDrumSysexResponses
-| Sysex             of byte array
+  let trackOffset cc =
+    if   cc <= 39uy  then 0uy
+    elif cc <= 63uy  then 1uy
+    elif cc <= 95uy  then 2uy
+    else                  3uy
 
 type TimestampedMessage<'t> = { 
   Timestamp : int
   Message: 't
 }
 
-type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
+type MachineDrumEventListener(md: MachineDrum, getNow : unit -> int) =
   let mutable mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
@@ -1050,11 +1132,8 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
         elif MachineDrumEventParser.isMachineDrumControlChange midiBaseChannel message then
           let channel = message.Channel.Value
           let cc = message.Data1
-          let trackOffset =
-            if   cc <= 39uy  then 0uy
-            elif cc <= 63uy  then 1uy
-            elif cc <= 95uy  then 2uy
-            else                  3uy
+          let trackOffset = MachineDrumEventParser.trackOffset cc
+
           let midiChannelOffset = channel - midiBaseChannel
           let track = Track.trackForValue ((midiChannelOffset * 4uy) + trackOffset)
           let parameter = MDTrackParameter.GetParameterForCC cc
@@ -1124,7 +1203,7 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
       | _ -> Sysex sysex
     | _ ->
      if sysex.[0..5] = Sysex.mdHeader then
-      MachineDrumSysex (MachineDrumSysexResponses.BuildResponse sysex)
+      MachineDrumSysex (MachineDrumSysexResponses.BuildResponse sysex).Value
      else
       Sysex sysex
 
@@ -1134,7 +1213,7 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
   )
   let sysexListener = midiIn.SysexReceived.Subscribe(fun m -> 
     // TODO TODO
-    let timestamp = getTimestamp()
+    let timestamp = getNow()
     let message = onSysexMessage m
     { Timestamp = timestamp; Message = message } |> event.Trigger
   )
@@ -1144,6 +1223,29 @@ type MachineDrumEventListener(md: MachineDrum, getTimestamp : unit -> int) =
       channelMessageListener.Dispose()
   
   [<CLIEvent>] member x.Event = event.Publish
+
+let mdDetection getTimestamp inputs outputs onSysex withMachineDrum  =
+    let queryMessage = QueryStatus(GlobalSlot)
+    let onSysex =
+        match onSysex with 
+        | Some onSysex -> onSysex 
+        | _ -> 
+        (fun sysex -> 
+            match MachineDrumSysexResponses.BuildResponse sysex with
+            | Some(MachineDrumSysexResponses.GlobalSettingsResponse globals) -> true
+            | _ -> false        
+        )
+    
+    Sysex.deviceInquiry inputs outputs
+        onSysex
+        (fun midiOut ->
+            midiOut.WriteSysex 0 (QueryStatus(GlobalSlot).Sysex)
+        )
+        (fun midiIn midiOut ->
+            let md = MachineDrum(midiIn, midiOut, getTimestamp)
+            withMachineDrum md
+            { new System.IDisposable with member x.Dispose () = () }
+        )
 
 
 

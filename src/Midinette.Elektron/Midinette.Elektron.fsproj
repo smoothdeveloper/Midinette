@@ -1,17 +1,16 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
     <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Midinette\Midinette.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="Elektron.fs" />
     <Compile Include="Elektron.Platform.fs" />
     <Compile Include="Elektron.MachineDrum.fs" />
     <Compile Include="Elektron.MonoMachine.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Midinette\Midinette.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

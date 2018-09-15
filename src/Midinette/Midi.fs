@@ -63,6 +63,7 @@ type [<Struct>] MidiMessage private(value:int) =
     MidiMessage.Encode (MidiMessage.StatusWithChannel messageType channel) data1 data2
   static member NoteOn channel note velocity  = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOn channel note velocity
   static member NoteOff channel note velocity = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOff channel note velocity
+  static member ProgramChange channel program = MidiMessage.EncodeChannelMessage MidiMessageType.ProgramChange channel program 0uy
   static member CC channel control value      = MidiMessage.EncodeChannelMessage MidiMessageType.ControllerChange channel control value
   static member FromWord word = MidiMessage word
   member x.Word = value
