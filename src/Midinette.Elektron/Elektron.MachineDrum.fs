@@ -214,6 +214,8 @@ with
     | i   -> failwithf "unknown parameter for cc %i" i
 type MDMachineSettings(bytes: byte array, offset: int, machineType: MDMachineType) =
   let baseAddress = 0x1a + (offset * 24)
+  let getAt a = bytes.[baseAddress + a]
+  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
   member x.SynthesisParameters = getSlice baseAddress 8 bytes
   member x.Parameter1                   = bytes.[baseAddress + 0]
   member x.Parameter2                   = bytes.[baseAddress + 1]
@@ -234,8 +236,8 @@ type MDMachineSettings(bytes: byte array, offset: int, machineType: MDMachineTyp
   member x.Distortion                   = bytes.[baseAddress + 16]
   member x.Volume                       = bytes.[baseAddress + 17]
   member x.Pan                          = bytes.[baseAddress + 18]
-  member x.DelaySend                    = bytes.[baseAddress + 19]
-  member x.ReverbSend                   = bytes.[baseAddress + 20]
+  member x.DelaySend                    with get () = getAt 19 and set v   = setAt 19 v
+  member x.ReverbSend                   with get () = getAt 20 and set v   = setAt 20 v
   member x.LFOSpeed                     = bytes.[baseAddress + 21]
   member x.LFODepth                     = bytes.[baseAddress + 22]
   member x.LFOShapeMix                  = bytes.[baseAddress + 23]
@@ -682,8 +684,8 @@ with
     | v -> failwithf "unknown status type %i" v
 
 type TriggerType =
-| TriggerChannel of Track
-| TriggerPattern of PatternLocator
+| TriggerChannel of mdTrack: Track
+| TriggerPattern of pattern: PatternLocator
 | UnknownTrigger of value: byte
 
 type NoteTriggerType = NoteTriggerType of note: byte * TriggerType
@@ -744,8 +746,8 @@ type KeyMapStructure(bytes: byte array) =
     )
     |> Array.sortBy snd
 
-  member __.GetTriggerNoteForChannel channel =
-    match notePerTriggerLookup.TryGetValue (TriggerChannel channel) with
+  member __.GetTriggerNoteForChannel mdTrack =
+    match notePerTriggerLookup.TryGetValue (TriggerChannel mdTrack) with
     | true, note -> Some note
     | _ -> None
 
@@ -936,7 +938,7 @@ type MachineDrumEvent =
 | TrackParameter    of Track * MDTrackParameter * value: byte
 | TrackTrigger      of Track * velocity: byte
 | TrackRelease      of Track
-| PatternChanged    of byte
+| PatternChanged    of PatternLocator
 | LFOSetting        of Track * LFOEvent
 | DelaySetting      of DelayParameter * value: byte
 | ReverbSetting     of ReverbParameter * value: byte
@@ -1017,7 +1019,11 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
                   Some (MidiOutputData.Message (MidiMessage.NoteOn channel note velocity))
               else
                   Some (MidiOutputData.Message (MidiMessage.NoteOff channel note velocity))
-
+      let makeCC track parameter value =
+        let cc = MDTrackParameter.GetCCForTrack parameter track
+        let channel = Track.midiBaseChannelOffset track + channel
+        MidiMessage.CC channel cc value
+        |> MidiOutputData.Message
       let makeProgramChange program =
         MidiMessage.ProgramChange channel program
         |> MidiOutputData.Message
@@ -1028,7 +1034,7 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
       | TrackTrigger(track, velocity)            -> makeNote note velocity true  |> Option.get |> some
       | TrackRelease(track)                      -> makeNote note 0uy      false |> Option.get |> some
       | TrackLevel(track, level)                 -> none
-      | TrackParameter(track, parameter, value)  -> none
+      | TrackParameter(track, parameter, value)  -> makeCC track parameter value |> some
       | PatternChanged pattern                   -> none
       | Unknown message                          -> message    |> MidiOutputData.Message |> some
       | Sysex data                               -> data       |> MidiOutputData.Sysex   |> some
@@ -1038,7 +1044,7 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
           
 
   
-  member x.SendEvents mdGlobals mdEvents getNow =
+  member x.SendEvents getNow mdGlobals mdEvents =
       match mdGlobals with
       | Some globals -> 
           let now = getNow ()
@@ -1128,7 +1134,7 @@ type MachineDrumEventListener(md: MachineDrum, getNow : unit -> int) =
     | Some mdGlobalSettings ->
         let midiBaseChannel = mdGlobalSettings.MidiBaseChannel 
         if message.MessageType = MidiMessageType.ProgramChange && message.Channel = Some midiBaseChannel then
-          PatternChanged message.Data1
+          PatternChanged (PatternLocator.FromByte message.Data1)
         elif MachineDrumEventParser.isMachineDrumControlChange midiBaseChannel message then
           let channel = message.Channel.Value
           let cc = message.Data1

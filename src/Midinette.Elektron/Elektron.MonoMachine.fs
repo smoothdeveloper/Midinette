@@ -454,6 +454,238 @@ type MonoMachineParameter =
 | EffectDelayFeedback
 | EffectDelayFilterBase
 | EffectDelayFilterWidth
-| LFOPage
-| LFODest
-| LFOTrig
+| LFOPage       of OneToThree
+| LFODest       of OneToThree
+| LFOTrig       of OneToThree
+| LFOWave       of OneToThree
+| LFOMultiplier of OneToThree
+| LFOSpeed      of OneToThree
+| LFOInterlace  of OneToThree
+| LFODepth      of OneToThree
+
+
+module MonoMachineControlChangeLogic =
+    
+  let getLFOCCPageBase lfoPage =
+    match lfoPage with
+    | OneToThree.One -> 88uy
+    | OneToThree.Two -> 104uy
+    | OneToThree.Three-> 112uy
+
+  let isCCLFOPageForPage page cc =
+    let baseCC = getLFOCCPageBase page
+    cc >= baseCC && cc < baseCC + 8uy
+
+  let getLfoParameter cc =
+    let page = OneToThree.One
+    let pageBase = getLFOCCPageBase page
+    if isCCLFOPageForPage page cc then
+        match cc - pageBase with
+        | 0uy -> LFOPage       page |> Some
+        | 1uy -> LFODest       page |> Some
+        | 2uy -> LFOTrig       page |> Some
+        | 3uy -> LFOWave       page |> Some
+        | 4uy -> LFOMultiplier page |> Some
+        | 5uy -> LFOSpeed      page |> Some
+        | 6uy -> LFOInterlace  page |> Some
+        | 7uy -> LFODepth      page |> Some
+        | _ -> None
+      else
+        None
+        
+
+
+  let getCC parameter =
+    match parameter with
+    | SynthParam1               -> 48uy | SynthParam2               -> 49uy | SynthParam3               -> 50uy | SynthParam4               -> 51uy
+    | SynthParam5               -> 52uy | SynthParam6               -> 53uy | SynthParam7               -> 54uy | SynthParam8               -> 55uy
+    | AmplAttack                -> 56uy | AmplHold                  -> 57uy | AmplDecay                 -> 58uy | AmplRelease               -> 59uy
+    | AmplDistortion            -> 60uy | AmplVolume                -> 61uy | AmplPan                   -> 62uy | AmplPortamento            -> 63uy
+    | FilterBase                -> 72uy | FilterWidth               -> 73uy | FilterHighPassQ           -> 74uy | FilterLowPassQ            -> 75uy
+    | FilterAttack              -> 76uy | FilterDecay               -> 77uy | FilterBaseOffset          -> 78uy | FilterWidthOffset         -> 79uy
+    | EffectEqFrequency         -> 80uy | EffectEqGain              -> 81uy | EffectSampleRateReduction -> 82uy | EffectDelayTime           -> 83uy
+    | EffectDelaySend           -> 84uy | EffectDelayFeedback       -> 85uy | EffectDelayFilterBase     -> 86uy | EffectDelayFilterWidth    -> 87uy
+    | LFOPage page              -> getLFOCCPageBase page + 0uy
+    | LFODest page              -> getLFOCCPageBase page + 1uy
+    | LFOTrig page              -> getLFOCCPageBase page + 2uy
+    | LFOWave page              -> getLFOCCPageBase page + 3uy
+    | LFOMultiplier page        -> getLFOCCPageBase page + 4uy
+    | LFOSpeed page             -> getLFOCCPageBase page + 5uy
+    | LFOInterlace page         -> getLFOCCPageBase page + 6uy
+    | LFODepth page             -> getLFOCCPageBase page + 7uy
+
+  let getFromCC cc =
+    match cc with
+    | 48uy -> Some SynthParam1              
+    | 49uy -> Some SynthParam2              
+    | 50uy -> Some SynthParam3              
+    | 51uy -> Some SynthParam4              
+    | 52uy -> Some SynthParam5              
+    | 53uy -> Some SynthParam6              
+    | 54uy -> Some SynthParam7              
+    | 55uy -> Some SynthParam8              
+    | 56uy -> Some AmplAttack               
+    | 57uy -> Some AmplHold                 
+    | 58uy -> Some AmplDecay                
+    | 59uy -> Some AmplRelease              
+    | 60uy -> Some AmplDistortion           
+    | 61uy -> Some AmplVolume               
+    | 62uy -> Some AmplPan                  
+    | 63uy -> Some AmplPortamento           
+    | 72uy -> Some FilterBase               
+    | 73uy -> Some FilterWidth              
+    | 74uy -> Some FilterHighPassQ          
+    | 75uy -> Some FilterLowPassQ           
+    | 76uy -> Some FilterAttack             
+    | 77uy -> Some FilterDecay              
+    | 78uy -> Some FilterBaseOffset         
+    | 79uy -> Some FilterWidthOffset        
+    | 80uy -> Some EffectEqFrequency        
+    | 81uy -> Some EffectEqGain             
+    | 82uy -> Some EffectSampleRateReduction
+    | 83uy -> Some EffectDelayTime          
+    | 84uy -> Some EffectDelaySend          
+    | 85uy -> Some EffectDelayFeedback      
+    | 86uy -> Some EffectDelayFilterBase    
+    | 87uy -> Some EffectDelayFilterWidth
+    | cc ->
+        getLfoParameter cc
+
+type LFOEvent =
+| AssignDest of Track * MonoMachineParameter
+
+
+type MonoMachineEvent =
+| TrackLevel of Track * value: byte
+| TrackParameter of Track * MonoMachineParameter * value: byte
+| TrackTrigger of Track * note: byte * velocity: byte
+| TrackRelease of Track * note: byte * velocity: byte
+| PatternChanged of PatternLocator
+| LFOSetting of Track * LFOEvent
+| Unknown of MidiMessage
+| MonoMachineSysex of MonoMachineSysexResponse
+| Sysex of byte array
+| KitChanged of byte
+| SequencerStarted
+| SequencerStopped
+| PatternSelected of PatternLocator
+//| Note of Track * noteNumber: byte * velocity: byte
+
+
+
+
+type TimestampedMessage<'t> = { 
+  Timestamp : int
+  Message: 't
+}
+
+
+type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
+  let settings = mm.CurrentGlobalSettings |> Option.map GlobalSettings.FromSysex
+  //let settings = { GlobalSettings.midiBaseChannel = 0uy }
+  let midiIn = mm.MidiOutPort
+  let midiRealtimeState = Midi.Registers.MidiRealtimeState()
+  let event = new Event<_>()
+  
+  let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
+  
+  let onChannelMessage (midiEvent: MidiEvent<_>) =
+    match settings with
+    | None -> Unknown midiEvent.Message
+    | Some settings ->
+      let message = midiEvent.Message
+      let messageChannel = message.Channel.Value
+      let midiChannelIsTrack = messageChannel >= settings.midiChannel && messageChannel < (settings.midiChannel + 6uy)
+      if midiChannelIsTrack then
+        let track = Track.FromByte (byte (messageChannel - settings.midiChannel))
+        match message with
+        | Midi.MessageMatching.NoteOn (_, note, velocity) -> TrackTrigger(track, note, velocity)
+        | Midi.MessageMatching.NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
+        | Midi.MessageMatching.ProgramChange {program = program} ->
+        
+          let locator = PatternLocator.FromByte program
+          PatternSelected(locator)
+        | _ -> Unknown message
+        
+        
+      else
+        Unknown message
+
+  let onSysexMessage sysex =
+    Sysex sysex
+
+  let realtimeListener = midiIn.RealtimeMessageReceived.Subscribe(fun m ->
+    let oldStarted = midiRealtimeState.started 
+    midiRealtimeState.UpdateWithEvent m.Message
+    if oldStarted <> midiRealtimeState.started then
+      { Timestamp = m.Timestamp; Message = (if midiRealtimeState.started then SequencerStarted else SequencerStopped)} |> event.Trigger
+  )
+  let channelMessageListener = midiIn.ChannelMessageReceived.Subscribe(fun m ->
+    //midiBaseChannel
+    let message = onChannelMessage m
+    { Timestamp = m.Timestamp; Message = message } |> event.Trigger
+  )
+  let sysexListener = midiIn.SysexReceived.Subscribe(fun m -> 
+    let timestamp = getNow()
+    let message = onSysexMessage m
+    { Timestamp = timestamp; Message = message } |> event.Trigger
+  )
+  interface System.IDisposable with
+    member x.Dispose() = 
+      realtimeListener.Dispose()
+      sysexListener.Dispose()
+      channelMessageListener.Dispose()
+  
+  [<CLIEvent>] member x.Event = event.Publish
+
+
+(*
+type MonoMachineEventListener(mnm: MonoMachine, getNow : unit -> int) =
+    let mutable mnmGlobals = mnm.CurrentGlobalSettings
+    let midiIn = mnm.MidiOutPort
+    let event = new Event<_>()
+
+    let onChannelMessage (midiEvent: MidiEvent<_>) =
+        let message = midiEvent.Message
+        let messageChannel = midiEvent.Message.Channel.Value
+        match mnmGlobals with
+        | None ->
+          Unknown message
+        | Some globals ->
+        
+            let midiBaseChannel = globals.MidiBaseChannel
+            let track =
+                if messageChannel >= midiBaseChannel && messageChannel < midiBaseChannel + 6 then
+                  Some (Track.FromByte (channel - midiBaseChannel))
+                else
+                  None
+            
+            match message with
+            | ProgramChange {_;program;other} -> PatternChanged (PatternLocator.FromByte program)
+            | CC {_;control;value} ->
+                match track with
+                | Some track ->
+                    match MonoMachineControlChangeLogic.getFromCC control with
+                    | Some mnmParam -> TrackParameter(track,mnmParam,value)
+                    | None          -> Unknown message
+                | None -> Unknown message
+            | None ->  Unknown message
+
+    let channelMessageListener = midiIn.ChannelMessageReceived.Subscribe(fun m ->
+        let message = onChannelMessage m
+        { Timestamp = (m.Timestamp); Message = message } |> event.Trigger
+    )    
+    let onSysexMessage (sysex: byte array) =
+        Sysex sysex
+
+    let sysexListener = midiIn.SysexReceived.Subscribe(fun m -> 
+        // TODO TODO
+        let timestamp = getNow()
+        let message = onSysexMessage m
+        { Timestamp = timestamp; Message = message } |> event.Trigger
+    )
+    interface IDisposable with
+        member x.Dispose() = 
+          sysexListener.Dispose()
+          channelMessageListener.Dispose()
+          *)

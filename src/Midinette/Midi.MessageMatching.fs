@@ -7,8 +7,20 @@ module MessageMatching =
     program: byte
     other:  byte
   }
+  type ControlChange = {
+    channel: byte
+    control: byte
+    value: byte
+
+  }
   let (|NoteOn|_|) (midiMessage: MidiMessage) =
     if midiMessage.MessageType = MidiMessageType.NoteOn then
+      Some (midiMessage.Channel.Value, (*note*)midiMessage.Data1, (*velocity*)midiMessage.Data2)
+    else
+      None
+
+  let (|NoteOff|_|) (midiMessage: MidiMessage) =
+    if midiMessage.MessageType = MidiMessageType.NoteOff then
       Some (midiMessage.Channel.Value, (*note*)midiMessage.Data1, (*velocity*)midiMessage.Data2)
     else
       None
@@ -25,7 +37,7 @@ module MessageMatching =
       && (Option.isNone channel || midiMessage.Channel = channel)
       && midiMessage.Data1 = ccNumber
       then
-      Some(midiMessage.Data2)
+      Some { channel = midiMessage.Channel.Value; control = midiMessage.Data1; value = midiMessage.Data2}
     else
       None
  

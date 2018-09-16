@@ -2,6 +2,17 @@ module Midi.Registers
 
 open Midi
 open System.Collections.Generic
+type MidiRealtimeState =
+    val mutable started : bool
+    new () = {started = false}
+    member this.UpdateWithEvent (midiMessage: MidiMessage) =
+      match midiMessage.MessageType with
+      | MidiMessageType.Start ->
+        this.started <- true
+      | MidiMessageType.Stop ->
+        this.started <- false
+      | _ -> ()
+   // member this.started = started
 
 type MidiChannelState<'timestamp> =
   val seenControllers         : HashSet<byte>
