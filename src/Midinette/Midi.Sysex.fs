@@ -4,6 +4,8 @@ module Sysex =
   open System
   open System.Diagnostics
   open Midi
+  open System.Net
+
   let sysexDeviceInquiry =
     [|
     0xf0uy
@@ -32,6 +34,7 @@ module Sysex =
       subscription.Dispose()
       return response
     }
+    |> Async.Catch
 
   let getSysexMessagesFromBytes data =
     let getSlice  s l (a: _ array) = Array.init l (fun i -> a.[s + i])
@@ -42,9 +45,13 @@ module Sysex =
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
     |]
 
-  type DetectedDevice<'timestamp> = DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
+  type DetectedDevice<'timestamp> =
+    
+    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
+    | Error of exn * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
 
   let deviceInquiry (inputPorts: IMidiInput<_> array) (outputPorts: IMidiOutput<_> array) sysexMatcher doWithOutput withInputAndOutput =
+    // maybe buggy
     let detectedPairs = [|
       let sysexInputTimeout = System.TimeSpan.FromSeconds 5.0
       for o in outputPorts do
@@ -54,11 +61,29 @@ module Sysex =
                 use scope = withInputAndOutput i o
                 let buildResponse sysexData = DetectedDevice(sysexData, i, o)
                 let response = helpGetSysex 10 sysexInputTimeout sysexMatcher buildResponse i
-                yield response
+                yield i,o,response
           |]
         doWithOutput o
-        yield (responses |> Async.Parallel |> Async.RunSynchronously)
+        yield 
+          (responses 
+          |> Array.map (fun (_,_,response) -> response) 
+          |> Async.Parallel 
+          |> Async.RunSynchronously 
+          |> Array.zip (responses |> Array.map (fun (i,o,_) ->(i,o)))
+          )
       |]
-    detectedPairs 
-    |> Array.map (Array.choose id)
-    |> Array.collect id
+    detectedPairs
+    |> Array.map (
+      fun items ->
+        items 
+        |> Array.map (
+          fun ((i,o), result) ->
+          
+            match result with
+            | Choice1Of2(data) -> data
+            | Choice2Of2 exn   -> Some (Error(exn, i, o))
+        )
+        
+    )
+    //|> Array.map (Array.choose id)
+    //|> Array.collect id

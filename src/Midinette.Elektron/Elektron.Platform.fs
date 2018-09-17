@@ -93,8 +93,8 @@ let checkSum (data: byte seq) =
   sum &&& 0b11111111111111
 // FABLE TODO
 
-let areMachineDrumCheckSumAndLengthValid data = true
-  (*
+let areMachineDrumCheckSumAndLengthValid data =
+  
   let checkSum = 
     getMachineDrumDataSliceFromSysexMessage data
     |> checkSum
@@ -103,9 +103,9 @@ let areMachineDrumCheckSumAndLengthValid data = true
   let expectedLength = int (getLengthFromSysexMessage data)
   printfn "%i %i %i %i" length expectedLength checkSum expectedCheckSum
   length = expectedLength && checkSum = expectedCheckSum
-  *)
-let areMonoMachineCheckSumAndLengthValid data = true
-  (*
+  
+let areMonoMachineCheckSumAndLengthValid data =
+  
   let checkSum = 
     getMonoMachineDataSliceFromSysexMessage data
     |> checkSum
@@ -114,7 +114,7 @@ let areMonoMachineCheckSumAndLengthValid data = true
   let expectedLength = int (getLengthFromSysexMessage data)
   printfn "%i %i %i %i" length expectedLength checkSum expectedCheckSum
   length = expectedLength && checkSum = expectedCheckSum
-  *)
+  
 module SilverMachines =
   [<RequireQualifiedAccess>]
   type PatternBank =

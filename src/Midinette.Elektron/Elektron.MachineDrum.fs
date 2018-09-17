@@ -980,7 +980,24 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
   #if FABLE_COMPILER
     failwithf "TODO FABLE"
   #else
-    Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> sysex.[0..5] = Sysex.mdHeader && sysex.[6] = request.ResponseMessageId) (request.BuildResponse >> Option.get) inPort
+    let getSysexAsync =
+      Midi.Sysex.helpGetSysex
+          maxMessage
+          timeout 
+          (fun sysex -> 
+              sysex.[0..5] = Sysex.mdHeader 
+              && sysex.[6] = request.ResponseMessageId
+          ) 
+          (request.BuildResponse >> Option.get) 
+          inPort
+    async {
+      let! sysx = getSysexAsync
+      match sysx with
+      | Choice1Of2 sysx -> return sysx
+      | Choice2Of2 exn -> 
+        printfn "oops"
+        return None
+    }
   #endif
 
   let performSysExRequest (requestMessage: MachineDrumSysexRequests) =

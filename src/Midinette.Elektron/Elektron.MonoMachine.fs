@@ -212,26 +212,32 @@ type GlobalSettings = {
   baseFrequency           : int
 }
 with
-  static member FromSysex (bytes: byte array) =
-     let globalData = (getMonoMachineDataSliceFromSysexMessage bytes) |> Seq.toArray |> Elektron.Platform.byteToData
-     
-     {
-      midiChannelAutoTrack     = globalData.[0x00]
-      midiChannel              = globalData.[0x01]
-      midiChannelMultiTrig     = globalData.[0x02]
-      midiChannelMultiMap      = globalData.[0x03]
-      midiMachineChannels      = [||]//globalData.[0x12..0x1]
+  static member FromSysex (sysexData: byte array) =
+    if areMonoMachineCheckSumAndLengthValid sysexData then
+      let globalData = (getMonoMachineDataSliceFromSysexMessage sysexData) |> Seq.toArray |> Elektron.Platform.byteToData
+      if globalData.Length < 0x101 then None
+      else
+        Some
+          {
+          midiChannelAutoTrack     = globalData.[0x00]
+          midiChannel              = globalData.[0x01]
+          midiChannelMultiTrig     = globalData.[0x02]
+          midiChannelMultiMap      = globalData.[0x03]
+          midiMachineChannels      = [||]//globalData.[0x12..0x1]
 
-      // external sync
-      ccDestinationsPerChannel = [||]//[|globalData.[0x18..0x1]|]
-      programChangeIn          = globalData.[0xfd] = 1uy
-      velocityCurve            = globalData.[0xff] |> VelocityCurve.FromByte
-      fixedVelocity            = globalData.[0x100]
-      knobSpeed                = globalData.[0x101]
-      baseFrequency            = 0 //globalData.[0x104..] |> Elektron.fourBytesToBigEndianInt
-    }
+          // external sync
+          ccDestinationsPerChannel = [||]//[|globalData.[0x18..0x1]|]
+          programChangeIn          = globalData.[0xfd] = 1uy
+          velocityCurve            = globalData.[0xff] |> VelocityCurve.FromByte
+          fixedVelocity            = globalData.[0x100]
+          knobSpeed                = globalData.[0x101]
+          baseFrequency            = 0 //globalData.[0x104..] |> Elektron.fourBytesToBigEndianInt
+          }
+    else
+      failwithf "can't parse globalsettings from sysex %A" sysexData
+
 type MonoMachineSysexResponse =
-| GlobalSettings of byte array
+| GlobalSettings of GlobalSettings
 | Kit of MonoMachineKit
 | Pattern of byte array
 | Song of byte array
@@ -279,11 +285,11 @@ with
     | QueryStatus _        -> Some 0x72uy
   member x.BuildResponse data =
     match x with
-    | DumpGlobalSettings _ -> GlobalSettings data
-    | DumpKit _            -> Kit(MonoMachineKit data)
-    | DumpPattern _        -> Pattern data
-    | DumpSong _           -> Song data
-    | QueryStatus _        -> StatusResponse((MonoMachineStatusType.FromByte data.[monoMachineHeader.Length + 1]), data.[monoMachineHeader.Length + 2])
+    | DumpGlobalSettings _ -> GlobalSettings.FromSysex data |> Option.map GlobalSettings
+    | DumpKit _            -> Some <| Kit(MonoMachineKit data)
+    | DumpPattern _        -> Some <| Pattern data
+    | DumpSong _           -> Some <| Song data
+    | QueryStatus _        -> Some <| StatusResponse((MonoMachineStatusType.FromByte data.[monoMachineHeader.Length + 1]), data.[monoMachineHeader.Length + 2])
     | AssignMachine(_)     -> failwithf "not implemented"
     //| _ -> None
 
@@ -295,9 +301,31 @@ type MonoMachineTrig =
 
 type MonoMachine(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
   let helpGetMonomachineSysex maxMessage (timeout: TimeSpan) (request: MonoMachineSysexRequests) (inPort: IMidiInput<_>) =
-    Midi.Sysex.helpGetSysex maxMessage timeout (fun sysex -> 
-      sysex.[0..5] = Helpers.monoMachineHeader && Some sysex.[6] = request.ResponseMessageId) request.BuildResponse inPort
-
+#if FABLE_COMPILER
+    failwithf "TODO FABLE"
+#else
+    let getSysexAsync =
+      Midi.Sysex.helpGetSysex 
+          maxMessage 
+          timeout 
+          (fun sysex -> 
+              sysex.[0..5] = Helpers.monoMachineHeader 
+              && Some sysex.[6] = request.ResponseMessageId
+          )
+          request.BuildResponse
+          inPort
+    async {
+      let! sysx = getSysexAsync
+      match sysx with
+      | Choice1Of2(Some(sysx)) -> return sysx
+      | Choice1Of2 (_) -> 
+          printfn "oops1"
+          return None
+      | Choice2Of2 exn -> 
+        printfn "oops2"
+        return None
+    }
+#endif
   let performSysExRequest (requestMessage: MonoMachineSysexRequests) =
     match requestMessage.ResponseMessageId with
     | Some id ->
@@ -581,7 +609,7 @@ type TimestampedMessage<'t> = {
 
 
 type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
-  let settings = mm.CurrentGlobalSettings |> Option.map GlobalSettings.FromSysex
+  let settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
   let midiRealtimeState = Midi.Registers.MidiRealtimeState()
