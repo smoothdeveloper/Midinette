@@ -4,7 +4,23 @@ open System
 open Midi
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
-
+type midi7 = byte
+type midi8 = byte
+type LFOShape =
+  | Tri    | InvertedTri 
+  | Saw    | InvertedSaw
+  | Square | InvertedSquare
+  | Exp    | InvertedExp
+  | Ramp   | InvertedRamp
+  | Random
+ with
+  static member FromCCValue (value: midi7) =
+    match value with
+    | _ -> failwithf "%i not defined" value
+    
+    
+type LFOMultiplier = Times1 | Times2 | Times4 | Times8 | Times16 | Times32 | Times64
+  
 module internal Helpers =
   let monoMachineHeader = [|
       0xf0uy
@@ -21,6 +37,7 @@ module internal Helpers =
     
 open Helpers
 open System.Text
+open System.Security.Authentication.ExtendedProtection
 
 type MonoMachineStatusType =
 | GlobalSlot
@@ -50,9 +67,6 @@ with
     | 0x20uy -> AudioMode
     | 0x21uy -> SequencerModeMode
     | v      -> failwithf "unknown status type %i" v
-
-
-
 
 
 type Track = Track1 | Track2 | Track3 | Track4 | Track5 | Track6
@@ -234,7 +248,8 @@ with
           baseFrequency            = 0 //globalData.[0x104..] |> Elektron.fourBytesToBigEndianInt
           }
     else
-      failwithf "can't parse globalsettings from sysex %A" sysexData
+      printf "can't parse globalsettings from sysex %A" sysexData
+      None
 
 type MonoMachineSysexResponse =
 | GlobalSettings of GlobalSettings
@@ -449,7 +464,23 @@ type MonoMachineParameterPage =
 | Filter
 | Effects
 | LFO of OneToThree
-type MonoMachineParameter =
+
+[<RequireQualifiedAccess>]
+type LFOTrigMode = Free | Trig | Hold | One | Half
+
+
+
+type LFOParameter =
+| Page       //of MonoMachineParameterPage
+| Dest       //of MonoMachineParameter
+| TrigType   //of LFOTrigMode
+| Wave       //of LFOShape
+| Multiplier //of LFOMultiplier
+| Speed      //of speed: byte
+| Interlace  //of byte
+| Depth      //of byte
+
+and MonoMachineParameter =
 | SynthParam1
 | SynthParam2
 | SynthParam3
@@ -482,15 +513,7 @@ type MonoMachineParameter =
 | EffectDelayFeedback
 | EffectDelayFilterBase
 | EffectDelayFilterWidth
-| LFOPage       of OneToThree
-| LFODest       of OneToThree
-| LFOTrig       of OneToThree
-| LFOWave       of OneToThree
-| LFOMultiplier of OneToThree
-| LFOSpeed      of OneToThree
-| LFOInterlace  of OneToThree
-| LFODepth      of OneToThree
-
+| LFOParameter of OneToThree * LFOParameter
 
 module MonoMachineControlChangeLogic =
     
@@ -508,20 +531,19 @@ module MonoMachineControlChangeLogic =
     let page = OneToThree.One
     let pageBase = getLFOCCPageBase page
     if isCCLFOPageForPage page cc then
-        match cc - pageBase with
-        | 0uy -> LFOPage       page |> Some
-        | 1uy -> LFODest       page |> Some
-        | 2uy -> LFOTrig       page |> Some
-        | 3uy -> LFOWave       page |> Some
-        | 4uy -> LFOMultiplier page |> Some
-        | 5uy -> LFOSpeed      page |> Some
-        | 6uy -> LFOInterlace  page |> Some
-        | 7uy -> LFODepth      page |> Some
-        | _ -> None
-      else
-        None
         
-
+        match cc - pageBase with
+        | 0uy -> (page, Page      ) |> LFOParameter |> Some
+        | 1uy -> (page, Dest      ) |> LFOParameter |> Some
+        | 2uy -> (page, TrigType  ) |> LFOParameter |> Some
+        | 3uy -> (page, Wave      ) |> LFOParameter |> Some
+        | 4uy -> (page, Multiplier) |> LFOParameter |> Some
+        | 5uy -> (page, Speed     ) |> LFOParameter |> Some
+        | 6uy -> (page, Interlace ) |> LFOParameter |> Some
+        | 7uy -> (page, Depth     ) |> LFOParameter |> Some
+        | _ -> None
+    else
+      None
 
   let getCC parameter =
     match parameter with
@@ -533,14 +555,14 @@ module MonoMachineControlChangeLogic =
     | FilterAttack              -> 76uy | FilterDecay               -> 77uy | FilterBaseOffset          -> 78uy | FilterWidthOffset         -> 79uy
     | EffectEqFrequency         -> 80uy | EffectEqGain              -> 81uy | EffectSampleRateReduction -> 82uy | EffectDelayTime           -> 83uy
     | EffectDelaySend           -> 84uy | EffectDelayFeedback       -> 85uy | EffectDelayFilterBase     -> 86uy | EffectDelayFilterWidth    -> 87uy
-    | LFOPage page              -> getLFOCCPageBase page + 0uy
-    | LFODest page              -> getLFOCCPageBase page + 1uy
-    | LFOTrig page              -> getLFOCCPageBase page + 2uy
-    | LFOWave page              -> getLFOCCPageBase page + 3uy
-    | LFOMultiplier page        -> getLFOCCPageBase page + 4uy
-    | LFOSpeed page             -> getLFOCCPageBase page + 5uy
-    | LFOInterlace page         -> getLFOCCPageBase page + 6uy
-    | LFODepth page             -> getLFOCCPageBase page + 7uy
+    | LFOParameter(page, Page      ) -> getLFOCCPageBase page + 0uy
+    | LFOParameter(page, Dest      ) -> getLFOCCPageBase page + 1uy
+    | LFOParameter(page, TrigType  ) -> getLFOCCPageBase page + 2uy
+    | LFOParameter(page, Wave      ) -> getLFOCCPageBase page + 3uy
+    | LFOParameter(page, Multiplier) -> getLFOCCPageBase page + 4uy
+    | LFOParameter(page, Speed     ) -> getLFOCCPageBase page + 5uy
+    | LFOParameter(page, Interlace ) -> getLFOCCPageBase page + 6uy
+    | LFOParameter(page, Depth     ) -> getLFOCCPageBase page + 7uy
 
   let getFromCC cc =
     match cc with
@@ -576,20 +598,29 @@ module MonoMachineControlChangeLogic =
     | 85uy -> Some EffectDelayFeedback      
     | 86uy -> Some EffectDelayFilterBase    
     | 87uy -> Some EffectDelayFilterWidth
-    | cc ->
-        getLfoParameter cc
+    | cc   -> getLfoParameter cc
 
+
+    
 type LFOEvent =
-| AssignDest of Track * MonoMachineParameter
-
-
+| AssignDest of pickedPage: MonoMachineParameterPage option * pickedDest: byte option * MonoMachineParameter option
+| PickShape of LFOShape
+| ChangeDepth of depth: byte
+| ChangeTime of time: byte * LFOMultiplier
+type MonoMachineControlChange =
+  | JoystickUp
+  | JoystickDown
+  | Mute
+  | MonoMachineParameter of MonoMachineParameter
+  | AllNotesOff
 type MonoMachineEvent =
 | TrackLevel of Track * value: byte
 | TrackParameter of Track * MonoMachineParameter * value: byte
 | TrackTrigger of Track * note: byte * velocity: byte
 | TrackRelease of Track * note: byte * velocity: byte
 | PatternChanged of PatternLocator
-| LFOSetting of Track * LFOEvent
+| LFOSetting of Track * LFOParameter * byte
+| LFOEvent of Track * OneToThree * LFOEvent 
 | Unknown of MidiMessage
 | MonoMachineSysex of MonoMachineSysexResponse
 | Sysex of byte array
@@ -597,24 +628,37 @@ type MonoMachineEvent =
 | SequencerStarted
 | SequencerStopped
 | PatternSelected of PatternLocator
+//| ControlChange of MonoMachineControlChange
 //| Note of Track * noteNumber: byte * velocity: byte
-
-
-
 
 type TimestampedMessage<'t> = { 
   Timestamp : int
   Message: 't
 }
 
-
+open Midi.MessageMatching
 type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
   let settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
   let midiRealtimeState = Midi.Registers.MidiRealtimeState()
   let event = new Event<_>()
-  
+
+  let midiChannelStates = 
+    let tracks =
+      [| 
+        Track1
+        Track2
+        Track3
+        Track4
+        Track5
+        Track6
+      |]
+
+    tracks
+    |> Array.map (fun t -> t, Midi.Registers.MidiChannelState<_>())
+    |> dict
+
   let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
   
   let onChannelMessage (midiEvent: MidiEvent<_>) =
@@ -627,15 +671,37 @@ type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
       if midiChannelIsTrack then
         let track = Track.FromByte (byte (messageChannel - settings.midiChannel))
         match message with
-        | Midi.MessageMatching.NoteOn (_, note, velocity) -> TrackTrigger(track, note, velocity)
-        | Midi.MessageMatching.NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
-        | Midi.MessageMatching.ProgramChange {program = program} ->
-        
+        | NoteOn (_, note, velocity)  -> TrackTrigger(track, note, velocity)
+        | NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
+        | ProgramChange {program = program} ->
           let locator = PatternLocator.FromByte program
           PatternSelected(locator)
-        | _ -> Unknown message
-        
-        
+        //| CC {control} ->
+          
+          //Unknown message
+        | _ ->
+          Unknown message
+
+        (*| MessageMatching.CC {Midi.MessageMatching.ControlChange.channel = channel; control; value} ->
+          match control with
+          | 0x01uy -> JoystickUp   |> MonoMachineEvent.ControlChange
+          | 0x02uy -> JoystickDown |> MonoMachineEvent.ControlChange
+          | 0x03uy -> Mute         |> MonoMachineEvent.ControlChange
+          | _ -> 
+            match getFromCC cc with
+            | Some mmParam ->
+              let lfoEvent =
+                match mmParam with
+                | LFOParameter(page, LFOParameter.Page) -> AssignDest(Some paramPage, None, None)  |> Some
+                | LFOParameter(page, LFOParameter.Dest) -> AssignDest(None, Some value, None)      |> Some
+                | LFOParameter(page, LFOParameter.Wave) -> LFOShape.FromCCValue value |> PickShape |> Some
+                | _ -> None
+              match lfoEvent with
+              | Some lfoEvent ->
+                  LFOEvent(track, page, lfoEvent)
+              | _ -> Unknown message
+            | _ ->  Unknown message
+        | _ -> Unknown message*)
       else
         Unknown message
 
