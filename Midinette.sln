@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28010.2019
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29123.88
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Midinette", "src\Midinette\Midinette.fsproj", "{EB59AD05-8B57-4FA6-B125-D97629ED39DE}"
 EndProject
@@ -9,7 +9,16 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Midinette.Elektron", "src\M
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Midinette.Fable", "src\Midinette.Fable\src\Midinette.Fable.fsproj", "{7478DC1B-308E-4921-9654-77DC9B4A61F4}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Midinette.Platform.PortMidi", "src\Midinette.Platform.PortMidi\Midinette.Platform.PortMidi.fsproj", "{B7D84F4A-6664-4D07-8689-317CABE09A2F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Midinette.Platform.PortMidi", "src\Midinette.Platform.PortMidi\Midinette.Platform.PortMidi.fsproj", "{B7D84F4A-6664-4D07-8689-317CABE09A2F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bits", "bits", "{4DB40A2C-FD24-4CD5-9B3F-A83315262C86}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		license.md = license.md
+		paket.dependencies = paket.dependencies
+		paket.lock = paket.lock
+		readme.md = readme.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

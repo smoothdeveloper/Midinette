@@ -1,4 +1,5 @@
 FSharp.Core
 Fable.Core
 dotnet-fable
+Fable.Promise
 Fable.Import.WebMIDI

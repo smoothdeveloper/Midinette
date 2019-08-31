@@ -8,10 +8,12 @@ generate_load_scripts: on
 clitool dotnet-fable
 
 nuget Fable.Core
+nuget Fable.Promise
 nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
-nuget FSharp.Core = 4.2.3
+nuget FSharp.Core
 nuget PortMidiSharp
+
 group Build
   source https://nuget.org/api/v2
   framework >= net461
