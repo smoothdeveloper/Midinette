@@ -1,5 +1,5 @@
 module Midi.Registers
-
+open Midinette.Platform
 open Midi
 open System.Collections.Generic
 type MidiRealtimeState =
@@ -68,51 +68,21 @@ type ISysexInputState =
  
 
 
-type IMidiPlatform<'device, 'event, 'timestamp> =
-  //abstract member GetMidiInput: device: 'device -> IMidiInput option
-  //abstract member GetMidiOutput: device: 'device -> IMidiOutput option
-  [<CLIEvent>] abstract member Error : IEvent<'device * string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<'device * MidiEvent<'timestamp>>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<'device * MidiEvent<'timestamp>>
-  [<CLIEvent>] abstract member SysexReceived : IEvent<'device * byte array>
-  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<'device * 'event>
-
-type MidiPlatformTrigger<'device, 'event, 'timestamp>() =
-  let error                   = new Event<_>()
-  let realtimeMessageReceived = new Event<_>()
-  let sysexReceived           = new Event<_>()
-  let channelMessageReceived  = new Event<_>()
-  let systemMessageReceived   = new Event<_>()
-  member x.NoticeError(d,m) = error.Trigger(d,m)
-  member x.NoticeRealtimeMessage(d, m) = realtimeMessageReceived.Trigger (d,m)
-  member x.NoticeSysex(d, m) = sysexReceived.Trigger (d,m)
-  member x.NoticeSystemMessage(d, m) = systemMessageReceived.Trigger(d,m)
-  member x.NoticeChannelMessage(d, m) = channelMessageReceived.Trigger(d,m)
-  interface IMidiPlatform<'device, 'event, 'timestamp> with
-    //member x.GetMidiInput d = getMidiInput d
-    //member x.GetMidiOutput d = getMidiOutput d
-    [<CLIEvent>] member x.Error = error.Publish
-    [<CLIEvent>] member x.ChannelMessageReceived  = channelMessageReceived.Publish
-    [<CLIEvent>] member x.SystemMessageReceived   = systemMessageReceived.Publish
-    [<CLIEvent>] member x.SysexReceived           = sysexReceived.Publish
-    [<CLIEvent>] member x.RealtimeMessageReceived = realtimeMessageReceived.Publish
-
-open Midi.MidiMessageTypeIdentifaction
 
 
 module PlatformImplHelp =
-
+  open Midi.MidiMessageTypeIdentifaction
   let internal getMessageType message : MidiMessageType =
     if message <= 14 then (message &&& 240) else (message &&& 255)
     |> byte
     |> LanguagePrimitives.EnumOfValue 
 
-  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_,_,_>)=
+  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_,_,_,_>)=
     if sysexState.SysexData.Length > 5 then
       (deviceInfo, sysexState.SysexData) |> platform.NoticeSysex
     sysexState.DisposeSysex ()
 
-  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_,_,_>)=
+  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_,_,_,_>)=
     let mutable endEncountered = false
     for i in 0 .. 3 do
       if not endEncountered then
@@ -123,7 +93,7 @@ module PlatformImplHelp =
           completeSysex deviceInfo sysexInput platform
           endEncountered <- true
   
-  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_,_,_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
+  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_,_,_,_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
     let deviceInfo = getDeviceInfo device
     let sysexInputState : ISysexInputState = getSysexInputState device
   
@@ -147,30 +117,3 @@ module PlatformImplHelp =
       else
         (deviceInfo, midiEvent) |> platform.NoticeChannelMessage
   
-  (*
-type BaseMidiPlatform<'device>(hasHostError, getHostErrorText, getDeviceInfo) =
-
-  let error = new Event<_>()
-  //let inputDeviceGate = obj()
-  //let inputDevices = Dictionary<int,'device (*OpenedDevice*)>()
-  let processMidiEvents device events =
-    if hasHostError device then
-      error.Trigger (getDeviceInfo device (*d.Device*), getHostErrorText ())
-    
-      (*
-      match Platform.Pm_Poll(d.Stream) with
-      | PmError.GotData -> 
-        match read d.Stream readBufferSize with
-        | Choice2Of2 message -> Error.Trigger(d.Device, message)
-        | Choice1Of2 events ->
-          processEvents d events
-      | PmError.NoData -> ()
-      | err ->
-        error.Trigger(d.Device, getErrorText err)
-        *)
-  interface IMidiPlatform<'device> with
-    [<CLIEvent>] member x.Error = error.Publish
-    //[<CLIEvent>] member x.ChannelMessageReceived = channelMessageReceived
-    //[<CLIEvent>] member x.SystemMessageReceived = systemMessageReceived
-    //[<CLIEvent>] member x.SysexReceived = sysexReceived
-    //[<CLIEvent>] member x.RealtimeMessageReceived = realtimeMessageReceived    *)

@@ -1,5 +1,5 @@
 ﻿module Midi.Tuning
-open Midi
+open Midinette.Platform
 // based on specs from midi.org
 // additional spec: http://www.somascape.org/midi/tech/spec.html#usx7E0800
 type MessageId =
@@ -126,9 +126,9 @@ with
       Some (makeSysex deviceId messageId data)
     | _ -> None
   
-  member x.Send (deviceId: byte, midiOutput: IMidiOutput<_>, nowTimestamp) =
+  member x.Send (deviceId: byte, midiOutput: IMidiOutput<_,_>, nowTimestamp) =
     match x.MakeMTSSysex deviceId with
-    | Some sysex -> midiOutput.WriteSysex (nowTimestamp()) sysex
+    | Some sysex -> midiOutput.WriteSysex (nowTimestamp())  sysex
     | None -> ()
 
     match x with

@@ -7,6 +7,7 @@ open System.Threading
 open System
 open System.Diagnostics
 open Midi
+open Midinette.Platform
 
 [<RequireQualifiedAccess>]
 type LFOType =
@@ -975,13 +976,14 @@ type MidiOutputData =
 | Message of MidiMessage
 | Sysex of bytes: byte array
 
-type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNowTimestamp: unit -> int) =
+type MachineDrum<'timestamp,'midievent>(inPort: IMidiInput<'midievent>, outPort: IMidiOutput<'timestamp, _>, getSysexNowTimestamp) =
   let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) inPort : Async<MachineDrumSysexResponses option> =
   #if FABLE_COMPILER
     failwithf "TODO FABLE"
   #else
     let getSysexAsync =
-      Midi.Sysex.helpGetSysex
+      
+      Midinette.Sysex.Sysex.helpGetSysex
           maxMessage
           timeout 
           (fun sysex -> 
@@ -1066,10 +1068,11 @@ type MachineDrum(inPort: IMidiInput<int>, outPort: IMidiOutput<int>, getSysexNow
       | Some globals -> 
           let now = getNow ()
           for timestamp, mdEvent in mdEvents do
+              let timestamp = timestamp // + now /// TDODODODODODO??
               x.EventToMidiMessages mdEvent globals 
               |> Array.iter (
                 function
-                | MidiOutputData.Message message -> outPort.WriteMessage (timestamp + now) message
+                | MidiOutputData.Message message -> outPort.WriteMessage timestamp message
                 | MidiOutputData.Sysex sysex     -> outPort.WriteSysex now sysex
               )
       | None -> ()
@@ -1133,12 +1136,12 @@ module MachineDrumEventParser =
     elif cc <= 95uy  then 2uy
     else                  3uy
 
-type TimestampedMessage<'t> = { 
-  Timestamp : int
+type TimestampedMessage<'t,'timestamp> = { 
+  Timestamp : 'timestamp
   Message: 't
 }
 
-type MachineDrumEventListener(md: MachineDrum, getNow : unit -> int) =
+type MachineDrumEventListener(md: MachineDrum<_,_>, getNow) =
   let mutable mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
@@ -1247,7 +1250,7 @@ type MachineDrumEventListener(md: MachineDrum, getNow : unit -> int) =
   
   [<CLIEvent>] member x.Event = event.Publish
 
-let mdDetection getTimestamp inputs outputs onSysex withMachineDrum  =
+let mdDetection (getTimestamp) (inputs: IMidiInput<_> array) (outputs: IMidiOutput<_,_> array) onSysex withMachineDrum  =
     let queryMessage = QueryStatus(GlobalSlot)
     let onSysex =
         match onSysex with 
@@ -1258,17 +1261,18 @@ let mdDetection getTimestamp inputs outputs onSysex withMachineDrum  =
             | Some(MachineDrumSysexResponses.GlobalSettingsResponse globals) -> true
             | _ -> false        
         )
+
+    Midinette.Sysex.Sysex.deviceInquiry inputs outputs 
+      onSysex
+      (fun midiOut ->
+        midiOut.WriteSysex (getTimestamp()) (QueryStatus(GlobalSlot).Sysex)
+      )
+      (fun midiIn midiOut ->
+          let md = MachineDrum(midiIn, midiOut, getTimestamp)
+          withMachineDrum md
+          { new System.IDisposable with member x.Dispose () = () }
+      )
     
-    Sysex.deviceInquiry inputs outputs
-        onSysex
-        (fun midiOut ->
-            midiOut.WriteSysex 0 (QueryStatus(GlobalSlot).Sysex)
-        )
-        (fun midiIn midiOut ->
-            let md = MachineDrum(midiIn, midiOut, getTimestamp)
-            withMachineDrum md
-            { new System.IDisposable with member x.Dispose () = () }
-        )
 
 
 

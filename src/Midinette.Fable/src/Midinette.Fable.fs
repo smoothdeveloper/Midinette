@@ -1,10 +1,11 @@
 module Midinette.Fable
 open Midi
+open Midinette.Platform
 module WM = Fable.Import.WebMIDI
 
 type DeviceInfo(port: WM.IMIDIPort) =
   member x.Port = port
-  interface Midi.IDeviceInfo with
+  interface IDeviceInfo with
     member x.DeviceId = port.Id |> int
     member x.Name = sprintf "id:%20A name:%20A manufacturer:%A" port.Id port.Name.Value port.Manufacturer
 
@@ -32,13 +33,13 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
   let realtimeMessageReceived = new Event<_>()
 
   do
-    let midiIn = this :> Midi.IMidiInput<double>
+    let midiIn = this :> IMidiInput<MidiEvent<double>>
 
     webMidiInput.set_OnMidiMessage (fun mm ->
       let midiMessage = Midi.MidiMessage.Encode mm.Data.[0] mm.Data.[1] mm.Data.[2]
 
       if midiMessage.IsChannelMessage then
-        channelMessageReceived.Trigger(MidiEvent(midiMessage, mm.ReceivedTime))
+        channelMessageReceived.Trigger(MidiEvent<_>(midiMessage, mm.ReceivedTime))
       match onMidiIn with
       | Some onMidiIn -> onMidiIn mm
       | _ -> ()
@@ -50,7 +51,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
       | _ -> ()
     )
   
-  interface Midi.IMidiInput<double> with
+  interface IMidiInput<MidiEvent<double>> with
     member x.DeviceInfo = DeviceInfo(webMidiInput) :> _
     member x.Close () = webMidiInput.Close () |> ignore
     member x.Open bufferSize = webMidiInput.Open() |> ignore
@@ -63,7 +64,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
 
 type WebMIDIOutputPortWrapper(webMidiOutput: WM.IMIDIOutput, device, onStateChange) as this =
     do
-        let midiOut = this :> Midi.IMidiOutput<double>
+        let midiOut = this :> IMidiOutput<double, MidiMessage>
         
         webMidiOutput.set_OnStateChange (fun sc ->
             match onStateChange with
@@ -71,27 +72,13 @@ type WebMIDIOutputPortWrapper(webMidiOutput: WM.IMIDIOutput, device, onStateChan
             | _ -> ()
         )
 
-    interface IMidiOutput<double> with
+    interface IMidiOutput<double, MidiMessage> with
         member x.Open bufferSize latency = ()
         member x.Close () = ()
         member x.WriteMessage timestamp message =
             webMidiOutput.SendAt (float timestamp) [|message.Status; message.Data1; message.Data2|]
         member x.WriteMessages timestamp messages =
-            messages |> Array.iter (((x :> IMidiOutput<_>).WriteMessage )timestamp)
+            messages |> Array.iter (((x :> IMidiOutput<_,_>).WriteMessage )timestamp)
         member x.WriteSysex timestamp data =
             webMidiOutput.SendAt (float timestamp) data
         member x.DeviceInfo = (DeviceInfo device) :> _
-
-  
-(*
-open Fable.Core
-
-(************************************************)
-(*     You should remove the next lines and     *)
-(*    start writing your library in this file   *)
-(************************************************)
-
-[<Emit("$0 + $1")>]
-let add (x: int) (y: int) = jsNative
-
-*)

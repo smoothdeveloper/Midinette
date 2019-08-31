@@ -2,6 +2,7 @@ module Elektron.MonoMachine
 
 open System
 open Midi
+open Midinette.Platform
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
 type midi7 = byte
@@ -314,13 +315,13 @@ type MonoMachineTrig =
 | LFO    = 0b0100uy
 
 
-type MonoMachine(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
+type MonoMachine<'timestamp,'midievent>(inPort: IMidiInput<'midievent>, outPort: IMidiOutput<'timestamp,_>, nowTimestamp) =
   let helpGetMonomachineSysex maxMessage (timeout: TimeSpan) (request: MonoMachineSysexRequests) (inPort: IMidiInput<_>) =
 #if FABLE_COMPILER
     failwithf "TODO FABLE"
 #else
     let getSysexAsync =
-      Midi.Sysex.helpGetSysex 
+      Midinette.Sysex.Sysex.helpGetSysex 
           maxMessage 
           timeout 
           (fun sysex -> 
@@ -347,10 +348,10 @@ type MonoMachine(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
       let task = 
         helpGetMonomachineSysex 5 (TimeSpan.FromMilliseconds(5000.)) requestMessage inPort
         |> Async.StartAsTask
-      requestMessage.Sysex |> outPort.WriteSysex 0
+      requestMessage.Sysex |> outPort.WriteSysex (nowTimestamp ())
       task.Result
     | None ->
-      requestMessage.Sysex |> outPort.WriteSysex 0
+      requestMessage.Sysex |> outPort.WriteSysex (nowTimestamp ())
       None
 
   member x.MidiOutPort = inPort
@@ -358,13 +359,13 @@ type MonoMachine(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
 
   member x.ChangeLevel track level =
     Midi.Nrpn.makeNRPN2 (00uy + track) 127uy level
-    |> outPort.WriteMessages 0
+    |> outPort.WriteMessages (nowTimestamp ())
   member x.ChangePitch track pitch =
     Midi.Nrpn.makeNRPN1 (112uy + track) pitch
-    |> outPort.WriteMessages 0
+    |> outPort.WriteMessages (nowTimestamp ())
   member x.SendTrigs track (trigs: MonoMachineTrig) =
     Midi.Nrpn.makeNRPN1 127uy ((track <<< 4) + (byte trigs))
-    |> outPort.WriteMessages 0
+    |> outPort.WriteMessages (nowTimestamp ())
   member x.DumpGlobal id =
     performSysExRequest (DumpGlobalSettings id)
   member x.DumpKit kit = 
@@ -374,7 +375,7 @@ type MonoMachine(inPort: IMidiInput<_>, outPort: IMidiOutput<_>) =
   member x.QueryStatus statusType =
     performSysExRequest (QueryStatus statusType)
   member x.AssignMachine track machine parameterAssignMode =
-    (AssignMachine (track, machine, parameterAssignMode)).Sysex |> outPort.WriteSysex 0
+    (AssignMachine (track, machine, parameterAssignMode)).Sysex |> outPort.WriteSysex (nowTimestamp ())
   
   member x.Dump dumpRequest =
     performSysExRequest dumpRequest
@@ -637,7 +638,7 @@ type TimestampedMessage<'t> = {
 }
 
 open Midi.MessageMatching
-type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
+type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine<_,_>) =
   let settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
@@ -659,7 +660,7 @@ type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
     |> Array.map (fun t -> t, Midi.Registers.MidiChannelState<_>())
     |> dict
 
-  let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
+  //let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
   
   let onChannelMessage (midiEvent: MidiEvent<_>) =
     match settings with
@@ -708,7 +709,7 @@ type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine) =
   let onSysexMessage sysex =
     Sysex sysex
 
-  let realtimeListener = midiIn.RealtimeMessageReceived.Subscribe(fun m ->
+  let realtimeListener = midiIn.RealtimeMessageReceived.Subscribe(fun (m: MidiEvent<_>) ->
     let oldStarted = midiRealtimeState.started 
     midiRealtimeState.UpdateWithEvent m.Message
     if oldStarted <> midiRealtimeState.started then

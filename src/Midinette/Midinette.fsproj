@@ -1,15 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
      <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Midi.File.fs" />
     <Compile Include="Midi.fs" />
     <Compile Include="Midi.MessageMatching.fs" />
     <Compile Include="Midi.Nrpn.fs" />
+    <Compile Include="Midi.Platform.fs" />
     <Compile Include="Midi.Registers.fs" />
     <Compile Include="Midi.Tuning.fs" />
     <Compile Include="Midi.Sysex.fs" />
+    <Content Include="paket.references" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

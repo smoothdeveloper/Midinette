@@ -1,18 +1,61 @@
-namespace Midi
+namespace rec Midi
+open MidiMessageTypeIdentifaction
+[<Struct>]
+type MidiNote = 
 
-type MidiNote =
-| C      = 0x0uy
-| CSharp = 0x1uy
-| D      = 0x2uy
-| DSharp = 0x3uy
-| E      = 0x4uy
-| F      = 0x5uy
-| FSharp = 0x6uy
-| G      = 0x7uy
-| GSharp = 0x8uy
-| A      = 0x9uy
-| ASharp = 0xauy
-| B      = 0xbuy
+  | MidiNote of byte
+
+  static member c      = MidiNote 00uy
+  static member cSharp = MidiNote 01uy
+  static member d      = MidiNote 02uy
+  static member dSharp = MidiNote 03uy
+  static member e      = MidiNote 04uy
+  static member f      = MidiNote 05uy
+  static member fSharp = MidiNote 06uy
+  static member g      = MidiNote 07uy
+  static member gSharp = MidiNote 08uy
+  static member a      = MidiNote 09uy
+  static member aSharp = MidiNote 10uy
+  static member b      = MidiNote 11uy
+
+  static member inline fromByte b = MidiNote (b % 12uy)
+  static member inline op_Explicit (MidiNote(n)) = n
+
+  override x.ToString () = MidiNote.getName x
+
+[<RequireQualifiedAccess>]
+module MidiNote =
+  let inline (|C|_|)      v = if byte v = byte MidiNote.c      then Some () else None 
+  let inline (|CSharp|_|) v = if byte v = byte MidiNote.cSharp then Some () else None 
+  let inline (|D|_|)      v = if byte v = byte MidiNote.d      then Some () else None 
+  let inline (|DSharp|_|) v = if byte v = byte MidiNote.dSharp then Some () else None 
+  let inline (|E|_|)      v = if byte v = byte MidiNote.e      then Some () else None 
+  let inline (|F|_|)      v = if byte v = byte MidiNote.f      then Some () else None 
+  let inline (|FSharp|_|) v = if byte v = byte MidiNote.fSharp then Some () else None 
+  let inline (|G|_|)      v = if byte v = byte MidiNote.g      then Some () else None 
+  let inline (|GSharp|_|) v = if byte v = byte MidiNote.gSharp then Some () else None 
+  let inline (|A|_|)      v = if byte v = byte MidiNote.a      then Some () else None 
+  let inline (|ASharp|_|) v = if byte v = byte MidiNote.aSharp then Some () else None 
+  let inline (|B|_|)      v = if byte v = byte MidiNote.b      then Some () else None 
+  let getName note =
+    let twelve = 
+      LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne 
+      + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne
+      + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne
+    match byte note % twelve with
+    | A -> "A"
+    | B -> "B"
+    | C -> "C"
+    | D -> "D"
+    | E -> "E"
+    | F -> "F"
+    | G -> "G"
+    | ASharp -> "A#"
+    | CSharp -> "C#"
+    | DSharp -> "D#"
+    | FSharp -> "F#"
+    | GSharp -> "G#"
+    | otherwise -> string otherwise
 
 // https://www.midi.org/specifications-old/item/table-1-summary-of-midi-message
 type MidiMessageType =
@@ -62,14 +105,14 @@ module MidiMessageTypeIdentifaction =
   let inline isChannelMessage messageType = messageType >= MidiMessageType.NoteOff && messageType <= (LanguagePrimitives.EnumOfValue 239uy)
   let inline isSysexBeginOrEnd messageType = messageType = MidiMessageType.SysEx || messageType = MidiMessageType.SysExEnd
 
-open MidiMessageTypeIdentifaction
+
 
 type [<Struct>] MidiMessage private(value:int) =
   static member StatusWithChannel (messageType: MidiMessageType) channel = byte messageType + channel
   static member NoteWithOctave (note: MidiNote) (octave: byte) = (octave * 12uy) + (byte note)
   static member GetNoteAndOctave (midiNoteNumber: byte) =
     let octave = midiNoteNumber / 12uy
-    let note : MidiNote = midiNoteNumber % 12uy |> LanguagePrimitives.EnumOfValue
+    let note = MidiNote.fromByte midiNoteNumber
     note, octave
 
   static member Encode (status: byte) (data1: byte) (data2: byte) =
@@ -109,16 +152,7 @@ type [<Struct>] MidiMessage private(value:int) =
       match x.MessageType with
       | MidiMessageType.NoteOn | MidiMessageType.NoteOff ->
         let note, octave = MidiMessage.GetNoteAndOctave x.Data1
-        let noteName =
-          match note with
-          | MidiNote.A | MidiNote.B | MidiNote.C | MidiNote.D | MidiNote.E | MidiNote.F | MidiNote.G -> note.ToString()
-          | MidiNote.ASharp -> "A#"
-          | MidiNote.CSharp -> "C#"
-          | MidiNote.DSharp -> "D#"
-          | MidiNote.FSharp -> "F#"
-          | MidiNote.GSharp -> "G#"
-          | _ -> failwithf "note %i" (byte note)
-            
+        let noteName = string note
         sprintf "%20s (channel:%02i) note (%03i): %2s octave: %i velocity %i" (string x.MessageType) x.Channel.Value x.Data1 noteName octave x.Data2
       | _ ->
         sprintf "%20s (channel:%02i) %03i %03i" (string x.MessageType) x.Channel.Value x.Data1 x.Data2
@@ -129,27 +163,7 @@ type [<Struct>] MidiEvent<'timestamp> (message: MidiMessage, timestamp: 'timesta
   member __.Message = message
   member __.Timestamp = timestamp
 
-type IDeviceInfo =
-  abstract member Name     : string
-  abstract member DeviceId : int
 
-type IMidiInput<'timestamp> =
-  [<CLIEvent>] abstract member Error : IEvent<string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<MidiEvent<'timestamp>>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<MidiEvent<'timestamp>>
-  [<CLIEvent>] abstract member SysexReceived : IEvent<byte array>
-  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<MidiEvent<'timestamp>>
-  abstract member Open: bufferSize:int -> unit
-  abstract member Close: unit -> unit
-  abstract member DeviceInfo : IDeviceInfo
-
-type IMidiOutput<'timestamp> =
-  abstract member WriteMessage: timestamp:'timestamp -> midiMessage:MidiMessage -> unit
-  abstract member WriteMessages: timestamp:'timestamp -> midiMessages:MidiMessage array -> unit
-  abstract member WriteSysex: timestamp:'timestamp -> data:byte array -> unit
-  abstract member Open: bufferSize:int -> latency: int -> unit
-  abstract member Close: unit -> unit
-  abstract member DeviceInfo : IDeviceInfo
 (*
 module MidiProgram =
   let change channel program (output: IMidiOutput<'timestamp>) =

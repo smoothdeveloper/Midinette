@@ -1,4 +1,6 @@
 source https://nuget.org/api/v2
+source ../portmidisharp/build/Debug/AnyCPU
+
 storage: none
 redirects: force
 generate_load_scripts: on
@@ -9,7 +11,7 @@ nuget Fable.Core
 nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
 nuget FSharp.Core = 4.2.3
-
+nuget PortMidiSharp
 group Build
   source https://nuget.org/api/v2
   framework >= net461

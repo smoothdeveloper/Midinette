@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="PortMidiMidinettePlatformImpl.fs" />
+    <Content Include="paket.references" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\portmidisharp\PortMidiSharp\PortMidiSharp.fsproj" />
+    <ProjectReference Include="..\Midinette\Midinette.fsproj" />
+  </ItemGroup>
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>
