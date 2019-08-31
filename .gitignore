@@ -1,4 +1,7 @@
 .paket
+.vs
+.idea
+build
 **/bin/*
 **/obj/*
 **/packages/*
