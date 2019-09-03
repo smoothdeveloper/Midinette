@@ -20,6 +20,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bits", "bits", "{4DB40A2C-F
 		readme.md = readme.md
 	EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Midinette.Platform.RtMidi", "src\Midinette.Platform.RtMidi\Midinette.Platform.RtMidi.fsproj", "{1BDC05D1-A580-4692-B34D-FEEC335BD163}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,6 +44,10 @@ Global
 		{B7D84F4A-6664-4D07-8689-317CABE09A2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B7D84F4A-6664-4D07-8689-317CABE09A2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B7D84F4A-6664-4D07-8689-317CABE09A2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1BDC05D1-A580-4692-B34D-FEEC335BD163}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1BDC05D1-A580-4692-B34D-FEEC335BD163}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1BDC05D1-A580-4692-B34D-FEEC335BD163}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1BDC05D1-A580-4692-B34D-FEEC335BD163}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -13,6 +13,7 @@ nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
 nuget FSharp.Core
 nuget PortMidiSharp
+nuget RtMidi.Core
 
 group Build
   source https://nuget.org/api/v2

@@ -3,12 +3,19 @@ open Midi
 open Midinette.Platform
 
 
-module internal Impl =
+module Impl =
     let toMidiEvent (e :PortMidi.MidiEvent) = MidiEvent<int>(Midi.MidiMessage.FromWord e.Message.Word, e.Timestamp)
     //let toMidiMessage   (m: PortMidi.MidiMessage) = Midi.MidiMessage.FromWord m.Word
     let fromMidiMessage (m: Midi.MidiMessage)     = PortMidi.MidiMessage.FromWord m.Word
     
 open Impl
+
+type PortMidiDeviceInfo = { deviceInfo: PortMidi.MidiDeviceInfo }
+with
+    interface IDeviceInfo with
+        member d.Name = d.deviceInfo.Name
+        //member d.DeviceId = d.deviceInfo.DeviceId
+        
 type PortMidiIn =
     { inPort: PortMidi.MidiInput }
 with
@@ -20,9 +27,7 @@ with
         [<CLIEvent>] member x.RealtimeMessageReceived = x.inPort.RealtimeMessageReceived |> Event.map toMidiEvent          
         member x.Open bufferSize = x.inPort.Open bufferSize
         member x.Close () = x.inPort.Close ()
-        member x.DeviceInfo = { new IDeviceInfo with 
-                                      member d.Name = x.inPort.DeviceInfo.Name
-                                      member d.DeviceId = x.inPort.DeviceInfo.DeviceId }
+        member x.DeviceInfo = { deviceInfo = x.inPort.DeviceInfo } :> _
 
 type PortMidiOut =
     { outPort: PortMidi.MidiOutput }
@@ -33,19 +38,17 @@ with
         member x.WriteMessage timestamp message = x.outPort.WriteMessage timestamp (fromMidiMessage message)
         member x.WriteMessages timestamp messages = x.outPort.WriteMessages timestamp (messages |> Array.map fromMidiMessage)
         member x.WriteSysex timestamp sysex = x.outPort.WriteSysex timestamp sysex
-        member x.DeviceInfo = { new IDeviceInfo with 
-                                      member d.Name = x.outPort.DeviceInfo.Name
-                                      member d.DeviceId = x.outPort.DeviceInfo.DeviceId }
-
-type PortMidiDeviceInfo = { deviceInfo: PortMidi.MidiDeviceInfo }
-with
-    interface IDeviceInfo with
-        member d.Name = d.deviceInfo.Name
-        member d.DeviceId = d.deviceInfo.DeviceId 
+        member x.DeviceInfo = { deviceInfo = x.outPort.DeviceInfo } :> _
+                                  
+ 
 type PortMidiMidinettePlatformImpl (platform: PortMidi.MidiPlatformTrigger) =
     let platform = platform
     
     new () = PortMidiMidinettePlatformImpl(PortMidi.Runtime.platform)
+    
+    member x.Events = x :> IMidiPlatformEvents<_,_,_,_>
+    member x.Platform = x :> IMidiPlatform<_,_,_,_>
+    
     interface IMidiPlatformEvents<IDeviceInfo,Midi.MidiEvent<int>,int,Midi.MidiMessage> with
         [<CLIEvent>] member x.Error                   = platform.Error                   |> Event.map (fun (d,e) -> {deviceInfo = d } :> IDeviceInfo, e)
         [<CLIEvent>] member x.ChannelMessageReceived  = platform.ChannelMessageReceived  |> Event.map (fun (d,e) -> {deviceInfo = d } :> IDeviceInfo, toMidiEvent e)

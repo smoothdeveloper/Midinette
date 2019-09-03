@@ -45,12 +45,12 @@ module Sysex =
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
     |]
 
-  type DetectedDevice<'timestamp,'midievent> =
+  type DetectedDevice<'timestamp,'midievent,'midimessage> =
     
-    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp,'midievent>
-    | Error of exn * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp,'midievent>
+    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'midievent> * deviceInput: IMidiOutput<'timestamp,'midimessage>
+    | Error of exn * deviceOutput: IMidiInput<'midievent> * deviceInput: IMidiOutput<'timestamp,'midimessage>
 
-  let deviceInquiry (inputPorts: IMidiInput<_> array) (outputPorts: IMidiOutput<_,_> array) sysexMatcher doWithOutput withInputAndOutput =
+  let deviceInquiry (inputPorts: IMidiInput<'midievent> array) (outputPorts: IMidiOutput<'timestamp,'midimessage> array) sysexMatcher doWithOutput withInputAndOutput =
     // maybe buggy
     let detectedPairs = [|
       let sysexInputTimeout = System.TimeSpan.FromSeconds 5.0
