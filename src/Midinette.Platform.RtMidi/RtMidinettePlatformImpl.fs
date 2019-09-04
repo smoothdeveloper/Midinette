@@ -4,13 +4,6 @@ open System.Reflection
 open Midinette.Platform
 
 module Impl =
-    let getRawDataReceivedEventFromInput port =
-        let f = port.GetType().GetEvent "Message";
-        let dataReceived = new Event<byte array>()
-        let handler = System.EventHandler<byte array>(fun _ -> dataReceived.Trigger)
-        f.AddEventHandler(port, handler)
-        dataReceived
-        
     let toBytes (message: Midi.MidiMessage) = [|message.Status;message.Data1;message.Data2|]
     let rtMidiOut (bytes: byte array) port =
         let f = port.GetType().GetField("_outputDevice", BindingFlags.NonPublic ||| BindingFlags.Instance)
@@ -22,6 +15,7 @@ module Impl =
         
 open Impl
 open Midi
+open RtMidi.Core.Unmanaged.Devices
 open System.Diagnostics
     
 type InPortEvents<'timestamp> = {
@@ -76,7 +70,20 @@ type RtMidiMidinettePlatformImpl() =
     let rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
-
+    let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_,_,_,_>
+    
+    member x.Trigger = platformEvents
+    member x.Platform = x :> IMidiPlatformEvents<_,_,_,_>
+    
+    member x.Now = watch.ElapsedTicks
+    interface IMidiPlatformEvents<IDeviceInfo, Midi.MidiEvent<int64>, int64, Midi.MidiMessage> with
+        [<CLIEvent>] member x.Error                   = platformEventsPublish.Error                   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
+        [<CLIEvent>] member x.ChannelMessageReceived  = platformEventsPublish.ChannelMessageReceived  |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
+        [<CLIEvent>] member x.SystemMessageReceived   = platformEventsPublish.SystemMessageReceived   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
+        [<CLIEvent>] member x.SysexReceived           = platformEventsPublish.SysexReceived           |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
+        [<CLIEvent>] member x.RealtimeMessageReceived = platformEventsPublish.RealtimeMessageReceived |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
+        
+    
     interface IMidiPlatform<IDeviceInfo, Midi.MidiEvent<int64>, int64, Midi.MidiMessage> with
         member x.InputDevices =
             RtMidi.Core.MidiDeviceManager.Default.InputDevices
@@ -94,29 +101,32 @@ type RtMidiMidinettePlatformImpl() =
                 | :? RtMidi.Core.Devices.Infos.IMidiInputDeviceInfo as device ->
                     // todo: keep that in store instead of creating / subscribing again
                     let port = device.CreateDevice()
-                    let dataReceived = getRawDataReceivedEventFromInput port
                     let error = new Event<_>()
                     let channelMessage = new Event<_>()
                     let sysex = new Event<_>()
                     let systemMessage = new Event<_>()
                     let realtimeMessage = new Event<_>()
-                    dataReceived.Publish.Add(fun bytes ->
+                    port.InputDevice.Message.Add(fun bytes ->
                       let status : MidiMessageType = LanguagePrimitives.EnumOfValue (bytes.[0])
-                      let timestamp = watch.ElapsedTicks
-                      let inline triggerMessageEvent (event1: Event<_>) platformNoticer =
+                      let inline toMidiEvent (bytes: byte array) (watch: Stopwatch) =
+                        let timestamp = watch.ElapsedTicks
                         let message = MidiMessage.Encode bytes.[0] bytes.[1] bytes.[2]
-                        let event = Midi.MidiEvent(message, timestamp)
+                        Midi.MidiEvent(message, timestamp)
+                      
+                      let inline triggerMessageEvent (event1: Event<_>) platformNoticer =
+                        let event = toMidiEvent bytes watch 
                         event1.Trigger event
-                        platformNoticer (rtDevice,event)
+                        platformNoticer (device,event)
                       if MidiMessageTypeIdentifaction.isChannelMessage status then
                         triggerMessageEvent channelMessage platformEvents.NoticeChannelMessage
                       elif MidiMessageTypeIdentifaction.isRealtimeMessage status then
                         triggerMessageEvent realtimeMessage platformEvents.NoticeRealtimeMessage
                       elif MidiMessageTypeIdentifaction.isSystemMessage status then
-                        triggerMessageEvent systemMessage platformEvents.NoticeSystemMessage
-                      elif MidiMessageTypeIdentifaction.isSysexBeginOrEnd status then
-                        sysex.Trigger bytes
-                        platformEvents.NoticeSysex(rtDevice, bytes)
+                        if MidiMessageTypeIdentifaction.isSysexBeginOrEnd status then
+                            sysex.Trigger bytes
+                            platformEvents.NoticeSysex(device, bytes)
+                        else
+                            triggerMessageEvent systemMessage platformEvents.NoticeSystemMessage
                       else
                         #if DEBUG
                         failwithf "unable to parse what I received received %A" bytes

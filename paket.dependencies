@@ -1,19 +1,18 @@
-source https://nuget.org/api/v2
+source ../../../github.com/micdah/RtMidi.Core/RtMidi.Core/bin/Debug
 source ../portmidisharp/build/Debug/AnyCPU
-
+source ../fsnative/build/Debug/AnyCPU
+source https://nuget.org/api/v2
 storage: none
 redirects: force
-generate_load_scripts: on
-
 clitool dotnet-fable
-
 nuget Fable.Core
 nuget Fable.Promise
 nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
 nuget FSharp.Core
+nuget fsnative
 nuget PortMidiSharp
-nuget RtMidi.Core
+nuget RtMidi.Core = 1.0.59-alpha-3
 
 group Build
   source https://nuget.org/api/v2
