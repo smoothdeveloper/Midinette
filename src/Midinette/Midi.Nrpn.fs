@@ -25,22 +25,24 @@ module Nrpn =
     |]
 
   type NRPNEvent =
+  | NRPN of ((byte * byte) * (byte * byte))
   | NRPN7 of ((byte * byte) * (byte * byte) * (byte * byte))
   | NRPN14 of ((byte * byte) * (byte * byte) * (byte * byte) * (byte * byte))
 
 
 
-  type NRPNChannelRegister(channel: byte) =
-    let timestampThreshold = 10
+  type NRPNChannelRegister<'timestamp>
+    (channel: byte, isExpired: 'timestamp -> bool, zeroTimestamp: 'timestamp) =
+     
     let paramNumMSB = 127uy
     let paramNumLSB = 127uy
-    let mutable firstMessageTimestamp = 0
-    let messages = ResizeArray<MidiEvent<_>> 4
+    let mutable firstMessageTimestamp = zeroTimestamp
+    let messages = ResizeArray<MidiEvent<'timestamp>> 4
     let nrpnEvent = Event<_>()
     let mutable subscription = Unchecked.defaultof<System.IDisposable>
 
     let clear() =
-      firstMessageTimestamp <- 0
+      firstMessageTimestamp <- zeroTimestamp
       messages.Clear()
 
     let push (startIndex: int) (endIndex: int) =
@@ -52,6 +54,7 @@ module Nrpn =
     
       let event = 
         match messages.Length with
+        | 2 -> Some (NRPN(getBytes messages.[0], getBytes messages.[1]))
         | 3 -> Some (NRPN7(getBytes messages.[0], getBytes messages.[1], getBytes messages.[2]))
         | 4 -> Some (NRPN14(getBytes messages.[0], getBytes messages.[1], getBytes messages.[2], getBytes messages.[3]))
         | _ -> None
@@ -59,7 +62,7 @@ module Nrpn =
       | Some event -> nrpnEvent.Trigger (messages.[messages.Length - 1].Timestamp, event)
       | _ -> ()
 
-    let rec checkQueue (timestamp) =
+    let rec checkQueue (timestamp: 'timestamp) =
       if messages.Count >= 3 then
         let mutable startIndex = -1
         let mutable endIndex = -1
@@ -97,8 +100,10 @@ module Nrpn =
             checkQueue timestamp
           elif count > 0 && endIndex > 0 then
             messages.RemoveRange(0, endIndex + 1)
-    let clearIfExpired (timestamp) =
-      if (timestamp - firstMessageTimestamp) > timestampThreshold then
+    
+    let clearIfExpired (timestamp: 'timestamp) =
+      if isExpired timestamp then
+      //if (timestamp - firstMessageTimestamp) > timestampThreshold then
         checkQueue timestamp
         clear()
 
@@ -115,10 +120,10 @@ module Nrpn =
       )*)
 
     interface System.IDisposable with
-      member x.Dispose() = subscription.Dispose()
+      member x.Dispose() = use ___ : System.IDisposable = subscription in ()
     [<CLIEvent>] member x.NRPN = nrpnEvent.Publish
   
-    member x.NoticeMessage (e: MidiEvent<_>) =
+    member x.NoticeMessage (e: MidiEvent<'timestamp>) =
     
       clearIfExpired (e.Timestamp)
       match e.Message with

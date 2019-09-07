@@ -8,7 +8,7 @@ open System
 open System.Diagnostics
 open Midi
 open Midinette.Platform
-
+(*
 [<RequireQualifiedAccess>]
 type LFOType =
 | Free
@@ -26,6 +26,22 @@ with
     | Free -> 0uy
     | Trig -> 1uy
     | Hold -> 2uy
+*)
+[<Struct>]
+type LFOType = private SDULFOType of byte
+with
+  static member Free = SDULFOType 0uy
+  static member Trig = SDULFOType 1uy
+  static member Hold = SDULFOType 2uy
+
+  static member FromByte b =
+    match b with
+    | 0uy -> LFOType.Free
+    | 1uy -> LFOType.Trig
+    | 2uy -> LFOType.Hold
+    | i -> failwithf "invalid lfo type %i" i
+
+  static member ToByte = function | SDULFOType b -> b
 
 
 module MachineSpecs =
@@ -823,6 +839,7 @@ type MDGlobalSettings(bytes: byte array) =
     |> function | 127uy -> None | v -> Some v
     *)
 type MachineDrumSysexMessageId =
+| Global  = 0x50uy
 | Kit     = 0x52uy
 | Pattern = 0x67uy
 | Song    = 0x69uy
@@ -976,7 +993,7 @@ type MidiOutputData =
 | Message of MidiMessage
 | Sysex of bytes: byte array
 
-type MachineDrum<'timestamp,'midievent>(inPort: IMidiInput<'midievent>, outPort: IMidiOutput<'timestamp, _>, getSysexNowTimestamp) =
+type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutput<'timestamp>, getSysexNowTimestamp) =
   let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) inPort : Async<MachineDrumSysexResponses option> =
   #if FABLE_COMPILER
     failwithf "TODO FABLE"
@@ -1141,7 +1158,7 @@ type TimestampedMessage<'t,'timestamp> = {
   Message: 't
 }
 
-type MachineDrumEventListener(md: MachineDrum<_,_>, getNow) =
+type MachineDrumEventListener<'timestamp>(md: MachineDrum<'timestamp>, getNow) =
   let mutable mdGlobalSettings = md.CurrentGlobalSettings
   let midiIn = md.MidiOutPort
   //let mutable lastKit = {Timestamp = 0; Message = None }
@@ -1250,7 +1267,7 @@ type MachineDrumEventListener(md: MachineDrum<_,_>, getNow) =
   
   [<CLIEvent>] member x.Event = event.Publish
 
-let mdDetection (getTimestamp) (inputs: IMidiInput<_> array) (outputs: IMidiOutput<_,_> array) onSysex withMachineDrum  =
+let mdDetection (getTimestamp) (inputs: IMidiInput<_> array) (outputs: IMidiOutput<_> array) onSysex withMachineDrum  =
     let queryMessage = QueryStatus(GlobalSlot)
     let onSysex =
         match onSysex with 
@@ -1258,7 +1275,8 @@ let mdDetection (getTimestamp) (inputs: IMidiInput<_> array) (outputs: IMidiOutp
         | _ -> 
         (fun sysex -> 
             match MachineDrumSysexResponses.BuildResponse sysex with
-            | Some(MachineDrumSysexResponses.GlobalSettingsResponse globals) -> true
+            //| Some(MachineDrumSysexResponses.GlobalSettingsResponseglobals) -> true
+            | Some(MachineDrumSysexResponses.StatusResponse(_)) -> true
             | _ -> false        
         )
 

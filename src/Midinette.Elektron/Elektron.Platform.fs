@@ -104,10 +104,11 @@ let areMachineDrumCheckSumAndLengthValid data =
   printfn "%i %i %i %i" length expectedLength checkSum expectedCheckSum
   length = expectedLength && checkSum = expectedCheckSum
   
-let areMonoMachineCheckSumAndLengthValid data =
+let areMonoMachineCheckSumAndLengthValid (data: byte array) =
   
   let checkSum = 
-    getMonoMachineDataSliceFromSysexMessage data
+    //getMonoMachineDataSliceFromSysexMessage data
+    data.[0x0a .. data.Length - 6]
     |> checkSum
   let length = (Array.length data) - 10
   let expectedCheckSum = int (getCheckSumFromSysexMessage data)

@@ -180,11 +180,11 @@ type MonoMachineKit (data: byte array) =
   member x.MessageLength = getLengthFromSysexMessage data
   member x.CheckSum = getCheckSumFromSysexMessage data
   member x.unpacked =
-    if areMonoMachineCheckSumAndLengthValid data then
+    //if areMonoMachineCheckSumAndLengthValid data then
       getMonoMachineDataSliceFromSysexMessage data
       |> Seq.toArray
       |> dataToByte
-    else [||]
+    //else [||]
   member x.Name =
     x.unpacked |> getSlice 0 11 |> ASCIIEncoding.ASCII.GetString
   member x.Levels =
@@ -227,12 +227,31 @@ type GlobalSettings = {
   baseFrequency           : int
 }
 with
+  static member Default =
+    {
+      midiChannelAutoTrack= 8uy
+      midiChannel         = 0uy
+      midiChannelMultiTrig    = 7uy
+      midiChannelMultiMap     = 08uy
+      midiMachineChannels     = [|0uy .. 05uy|]
+      ccDestinationsPerChannel= [||]
+      programChangeIn         = true
+      velocityCurve           = VelocityCurve.Linear
+      fixedVelocity           = 0uy
+      knobSpeed               = 0uy
+      baseFrequency           = 440
+
+    }
   static member FromSysex (sysexData: byte array) =
+    // note: this is just plain broken on hardware side
     if areMonoMachineCheckSumAndLengthValid sysexData then
-      let globalData = (getMonoMachineDataSliceFromSysexMessage sysexData) |> Seq.toArray |> Elektron.Platform.byteToData
-      if globalData.Length < 0x101 then None
-      else
-        Some
+      let globalData =
+        (getMonoMachineDataSliceFromSysexMessage sysexData)
+        |> Seq.toArray
+        |> Elektron.Platform.dataToByte
+      //if globalData.Length < 0x101 then None
+      //else
+      Some
           {
           midiChannelAutoTrack     = globalData.[0x00]
           midiChannel              = globalData.[0x01]
@@ -242,10 +261,10 @@ with
 
           // external sync
           ccDestinationsPerChannel = [||]//[|globalData.[0x18..0x1]|]
-          programChangeIn          = globalData.[0xfd] = 1uy
-          velocityCurve            = globalData.[0xff] |> VelocityCurve.FromByte
-          fixedVelocity            = globalData.[0x100]
-          knobSpeed                = globalData.[0x101]
+          programChangeIn          = true //globalData.[0xfd] = 1uy
+          velocityCurve            = VelocityCurve.Fixed 1uy //globalData.[0xff] |> VelocityCurve.FromByte
+          fixedVelocity            = 0uy //globalData.[0x100]
+          knobSpeed                = 0uy//globalData.[0x101]
           baseFrequency            = 0 //globalData.[0x104..] |> Elektron.fourBytesToBigEndianInt
           }
     else
@@ -262,6 +281,9 @@ with
   static member BuildResponse (bytes: byte array) =
     match bytes.[6] with
     | 72uy -> StatusResponse(MonoMachineStatusType.FromByte bytes.[7], bytes.[8])
+    | 0x50uy -> GlobalSettings (GlobalSettings.FromSysex(bytes).Value)
+    | 0x52uy -> Kit (MonoMachineKit(bytes))
+    | 0x67uy -> Pattern bytes
     | _ -> failwithf "h:%x response not understood" bytes.[6]
 
 
@@ -315,7 +337,7 @@ type MonoMachineTrig =
 | LFO    = 0b0100uy
 
 
-type MonoMachine<'timestamp,'midievent>(inPort: IMidiInput<'midievent>, outPort: IMidiOutput<'timestamp,_>, nowTimestamp) =
+type MonoMachine<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutput<'timestamp>, nowTimestamp) =
   let helpGetMonomachineSysex maxMessage (timeout: TimeSpan) (request: MonoMachineSysexRequests) (inPort: IMidiInput<_>) =
 #if FABLE_COMPILER
     failwithf "TODO FABLE"
@@ -335,10 +357,10 @@ type MonoMachine<'timestamp,'midievent>(inPort: IMidiInput<'midievent>, outPort:
       match sysx with
       | Choice1Of2(Some(sysx)) -> return sysx
       | Choice1Of2 (_) -> 
-          printfn "oops1"
+          printfn "oops1 none"
           return None
       | Choice2Of2 exn -> 
-        printfn "oops2"
+        printfn "oops2 %A" exn
         return None
     }
 #endif
@@ -623,6 +645,7 @@ type MonoMachineEvent =
 | LFOSetting of Track * LFOParameter * byte
 | LFOEvent of Track * OneToThree * LFOEvent 
 | Unknown of MidiMessage
+| UnknownNRPN of Midi.Nrpn.NRPNEvent
 | MonoMachineSysex of MonoMachineSysexResponse
 | Sysex of byte array
 | KitChanged of byte
@@ -632,18 +655,33 @@ type MonoMachineEvent =
 //| ControlChange of MonoMachineControlChange
 //| Note of Track * noteNumber: byte * velocity: byte
 
-type TimestampedMessage<'t> = { 
-  Timestamp : int
+type TimestampedMessage<'timestamp,'t> = { 
+  Timestamp : 'timestamp
   Message: 't
 }
 
 open Midi.MessageMatching
-type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine<_,_>) =
+open Midi.Nrpn
+
+type MonoMachineEventListener<'timestamp>
+  when 'timestamp : comparison
+  //and 'timestamp : (static member (+) : ^timestamp -> b: ^timestamp -> ^timestamp)
+  (getNow: unit -> 'timestamp, mm: MonoMachine<'timestamp>) =
+    
   let settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
   let midiRealtimeState = Midi.Registers.MidiRealtimeState()
   let event = new Event<_>()
+
+  
+  let nrpnRegisters =
+        Array.init 16 (
+                       fun i ->
+                          let register = new NRPNChannelRegister<_>(byte i, (fun timestamp -> false) ,getNow())
+                          register.NRPN.Add(fun n -> event.Trigger({ Timestamp = getNow(); Message = UnknownNRPN (snd n) }))
+                          register
+                       )
 
   let midiChannelStates = 
     let tracks =
@@ -663,48 +701,54 @@ type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine<_,_>) =
   //let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
   
   let onChannelMessage (midiEvent: MidiEvent<_>) =
-    match settings with
-    | None -> Unknown midiEvent.Message
-    | Some settings ->
-      let message = midiEvent.Message
-      let messageChannel = message.Channel.Value
-      let midiChannelIsTrack = messageChannel >= settings.midiChannel && messageChannel < (settings.midiChannel + 6uy)
-      if midiChannelIsTrack then
-        let track = Track.FromByte (byte (messageChannel - settings.midiChannel))
-        match message with
-        | NoteOn (_, note, velocity)  -> TrackTrigger(track, note, velocity)
-        | NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
-        | ProgramChange {program = program} ->
-          let locator = PatternLocator.FromByte program
-          PatternSelected(locator)
-        //| CC {control} ->
-          
-          //Unknown message
-        | _ ->
-          Unknown message
-
-        (*| MessageMatching.CC {Midi.MessageMatching.ControlChange.channel = channel; control; value} ->
-          match control with
-          | 0x01uy -> JoystickUp   |> MonoMachineEvent.ControlChange
-          | 0x02uy -> JoystickDown |> MonoMachineEvent.ControlChange
-          | 0x03uy -> Mute         |> MonoMachineEvent.ControlChange
-          | _ -> 
-            match getFromCC cc with
-            | Some mmParam ->
-              let lfoEvent =
-                match mmParam with
-                | LFOParameter(page, LFOParameter.Page) -> AssignDest(Some paramPage, None, None)  |> Some
-                | LFOParameter(page, LFOParameter.Dest) -> AssignDest(None, Some value, None)      |> Some
-                | LFOParameter(page, LFOParameter.Wave) -> LFOShape.FromCCValue value |> PickShape |> Some
-                | _ -> None
-              match lfoEvent with
-              | Some lfoEvent ->
-                  LFOEvent(track, page, lfoEvent)
-              | _ -> Unknown message
-            | _ ->  Unknown message
-        | _ -> Unknown message*)
-      else
+    nrpnRegisters.[int midiEvent.Message.Channel.Value].NoticeMessage(midiEvent)
+    // hijack settings as hardware doesn't send proper sysex...
+    let settings = GlobalSettings.Default //settings |> Option.defaultValue 
+    let message = midiEvent.Message
+    let messageChannel = message.Channel.Value
+    let midiChannelIsTrack = messageChannel >= settings.midiChannel && messageChannel < (settings.midiChannel + 6uy)
+    if midiChannelIsTrack then
+      let track = Track.FromByte (byte (messageChannel - settings.midiChannel))
+      match message with
+      | NoteOn (_, note, velocity)  -> TrackTrigger(track, note, velocity)
+      | NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
+      | ProgramChange {program = program} ->
+        let locator = PatternLocator.FromByte program
+        PatternSelected(locator)
+      | CC None 99uy ee
+      | CC None 98uy ee
+      | CC None 06uy ee
+      | CC None 38uy ee ->
+        
         Unknown message
+      //| CC {control} ->
+        
+        //Unknown message
+      | _ ->
+        Unknown message
+
+      (*| MessageMatching.CC {Midi.MessageMatching.ControlChange.channel = channel; control; value} ->
+        match control with
+        | 0x01uy -> JoystickUp   |> MonoMachineEvent.ControlChange
+        | 0x02uy -> JoystickDown |> MonoMachineEvent.ControlChange
+        | 0x03uy -> Mute         |> MonoMachineEvent.ControlChange
+        | _ -> 
+          match getFromCC cc with
+          | Some mmParam ->
+            let lfoEvent =
+              match mmParam with
+              | LFOParameter(page, LFOParameter.Page) -> AssignDest(Some paramPage, None, None)  |> Some
+              | LFOParameter(page, LFOParameter.Dest) -> AssignDest(None, Some value, None)      |> Some
+              | LFOParameter(page, LFOParameter.Wave) -> LFOShape.FromCCValue value |> PickShape |> Some
+              | _ -> None
+            match lfoEvent with
+            | Some lfoEvent ->
+                LFOEvent(track, page, lfoEvent)
+            | _ -> Unknown message
+          | _ ->  Unknown message
+      | _ -> Unknown message*)
+    else
+      Unknown message
 
   let onSysexMessage sysex =
     Sysex sysex
@@ -733,13 +777,11 @@ type MonoMachineEventListener(getNow: unit -> int, mm: MonoMachine<_,_>) =
   
   [<CLIEvent>] member x.Event = event.Publish
 
-
-(*
-type MonoMachineEventListener(mnm: MonoMachine, getNow : unit -> int) =
+(*type MonoMachineEventListener(mnm: MonoMachine, getNow : unit -> int) =
     let mutable mnmGlobals = mnm.CurrentGlobalSettings
     let midiIn = mnm.MidiOutPort
     let event = new Event<_>()
-
+    
     let onChannelMessage (midiEvent: MidiEvent<_>) =
         let message = midiEvent.Message
         let messageChannel = midiEvent.Message.Channel.Value

@@ -1,4 +1,5 @@
 namespace Midinette.Platform
+open Midi
 
 type IDeviceInfo =
   abstract member Name     : string
@@ -10,39 +11,38 @@ type IRawInputPort<'rawdata> =
 type IRawOutputPort<'rawdata> =   
   abstract member WriteMessage: midiMessage: 'rawdata -> unit
   
-type IMidiInput<'midievent> =
+type IMidiInput<'timestamp> =
   [<CLIEvent>] abstract member Error : IEvent<string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<'midievent>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<'midievent>
+  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<MidiEvent<'timestamp>>
+  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<MidiEvent<'timestamp>>
   [<CLIEvent>] abstract member SysexReceived : IEvent<byte array>
-  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<'midievent>
+  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<MidiEvent<'timestamp>>
   abstract member Open: bufferSize:int -> unit
   abstract member Close: unit -> unit
   abstract member DeviceInfo : IDeviceInfo
 
-type IMidiOutput<'timestamp,'midimessage> =
-  abstract member WriteMessage:  timestamp:'timestamp -> midiMessage:'midimessage        -> unit
-  abstract member WriteMessages: timestamp:'timestamp -> midiMessages:'midimessage array -> unit
+type IMidiOutput<'timestamp> =
+  abstract member WriteMessage:  timestamp:'timestamp -> midiMessage: MidiMessage        -> unit
+  abstract member WriteMessages: timestamp:'timestamp -> midiMessages: MidiMessage array -> unit
   abstract member WriteSysex:    timestamp:'timestamp -> data:byte array                 -> unit
   abstract member Open:          bufferSize:int       -> latency: int                    -> unit
   abstract member Close:         unit                                                    -> unit
   abstract member DeviceInfo : IDeviceInfo
 
+type IMidiPlatformEvents<'timestamp> =
+  [<CLIEvent>] abstract member Error : IEvent<IDeviceInfo * string>
+  [<CLIEvent>] abstract member ChannelMessageReceived  : IEvent<IDeviceInfo * MidiEvent<'timestamp>>
+  [<CLIEvent>] abstract member SystemMessageReceived   : IEvent<IDeviceInfo * MidiEvent<'timestamp>>
+  [<CLIEvent>] abstract member SysexReceived           : IEvent<IDeviceInfo * byte array>
+  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<IDeviceInfo * MidiEvent<'timestamp>>
 
-type IMidiPlatformEvents<'device, 'event, 'timestamp, 'midimessage> =
-  [<CLIEvent>] abstract member Error : IEvent<'device * string>
-  [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<'device * 'event>
-  [<CLIEvent>] abstract member SystemMessageReceived : IEvent<'device * 'event>
-  [<CLIEvent>] abstract member SysexReceived : IEvent<'device * byte array>
-  [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<'device * 'event>
+type IMidiPlatform<'timestamp> =
+  abstract member GetMidiInput: device: IDeviceInfo -> IMidiInput<'timestamp> option
+  abstract member GetMidiOutput: device: IDeviceInfo -> IMidiOutput<'timestamp> option
+  abstract member InputDevices: IDeviceInfo array
+  abstract member OutputDevices: IDeviceInfo array
 
-type IMidiPlatform<'device, 'event, 'timestamp, 'midimessage> =
-  abstract member GetMidiInput: device: 'device -> IMidiInput<'event> option
-  abstract member GetMidiOutput: device: 'device -> IMidiOutput<'timestamp, 'midimessage> option
-  abstract member InputDevices: 'device array
-  abstract member OutputDevices: 'device array
-
-type MidiPlatformTrigger<'device, 'event, 'timestamp, 'midimessage>() =
+type MidiPlatformTrigger<'timestamp>() =
   let error                   = new Event<_>()
   let realtimeMessageReceived = new Event<_>()
   let sysexReceived           = new Event<_>()
@@ -53,7 +53,7 @@ type MidiPlatformTrigger<'device, 'event, 'timestamp, 'midimessage>() =
   member x.NoticeSysex(d, m)           = sysexReceived.Trigger (d,m)
   member x.NoticeSystemMessage(d, m)   = systemMessageReceived.Trigger(d,m)
   member x.NoticeChannelMessage(d, m)  = channelMessageReceived.Trigger(d,m)
-  interface IMidiPlatformEvents<'device, 'event, 'timestamp, 'midimessage> with
+  interface IMidiPlatformEvents<'timestamp> with
     [<CLIEvent>] member x.Error = error.Publish
     [<CLIEvent>] member x.ChannelMessageReceived  = channelMessageReceived.Publish
     [<CLIEvent>] member x.SystemMessageReceived   = systemMessageReceived.Publish

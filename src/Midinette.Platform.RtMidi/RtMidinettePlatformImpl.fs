@@ -33,7 +33,7 @@ with
 
 type RtMidiIn = { inPort: RtMidi.Core.Devices.IMidiInputDevice; info: RtMidiInfo; inEvents: InPortEvents<int64> }
 with
-    interface IMidiInput<Midi.MidiEvent<int64>> with
+    interface IMidiInput<int64> with
         
         member x.Close () = x.inPort.Close()
         member x.Open bufferSize = x.inPort.Open() |> ignore
@@ -46,7 +46,7 @@ with
     
 type RtMidiOut<'timestamp> = { outPort: RtMidi.Core.Devices.IMidiOutputDevice; info: RtMidiInfo }
 with
-    interface IMidiOutput<'timestamp,Midi.MidiMessage> with
+    interface IMidiOutput<'timestamp> with
         member x.DeviceInfo = x.info :> _
         member x.Open bufferSize latency = x.outPort.Open() |> ignore
         member x.Close () = x.outPort.Close()
@@ -70,27 +70,28 @@ type RtMidiMidinettePlatformImpl() =
     let rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
-    let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_,_,_,_>
+    let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
     
     member x.Trigger = platformEvents
-    member x.Platform = x :> IMidiPlatformEvents<_,_,_,_>
+    //member x.Platform = x :> IMidiPlatformEvents<_>
     
     member x.Now = watch.ElapsedTicks
-    interface IMidiPlatformEvents<IDeviceInfo, Midi.MidiEvent<int64>, int64, Midi.MidiMessage> with
+    (*
+    interface IMidiPlatformEvents<int64> with
         [<CLIEvent>] member x.Error                   = platformEventsPublish.Error                   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         [<CLIEvent>] member x.ChannelMessageReceived  = platformEventsPublish.ChannelMessageReceived  |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         [<CLIEvent>] member x.SystemMessageReceived   = platformEventsPublish.SystemMessageReceived   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         [<CLIEvent>] member x.SysexReceived           = platformEventsPublish.SysexReceived           |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         [<CLIEvent>] member x.RealtimeMessageReceived = platformEventsPublish.RealtimeMessageReceived |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         
-    
-    interface IMidiPlatform<IDeviceInfo, Midi.MidiEvent<int64>, int64, Midi.MidiMessage> with
+    *)
+    interface IMidiPlatform<int64> with
         member x.InputDevices =
             RtMidi.Core.MidiDeviceManager.Default.InputDevices
             |> Seq.map (fun d -> { info = d} :> IDeviceInfo)
             |> Seq.toArray
         member x.OutputDevices =
-            RtMidi.Core.MidiDeviceManager.Default.InputDevices
+            RtMidi.Core.MidiDeviceManager.Default.OutputDevices
             |> Seq.map (fun d -> { info = d} :> IDeviceInfo)
             |> Seq.toArray
             
@@ -116,7 +117,7 @@ type RtMidiMidinettePlatformImpl() =
                       let inline triggerMessageEvent (event1: Event<_>) platformNoticer =
                         let event = toMidiEvent bytes watch 
                         event1.Trigger event
-                        platformNoticer (device,event)
+                        platformNoticer ({info = device},event)
                       if MidiMessageTypeIdentifaction.isChannelMessage status then
                         triggerMessageEvent channelMessage platformEvents.NoticeChannelMessage
                       elif MidiMessageTypeIdentifaction.isRealtimeMessage status then
@@ -124,7 +125,7 @@ type RtMidiMidinettePlatformImpl() =
                       elif MidiMessageTypeIdentifaction.isSystemMessage status then
                         if MidiMessageTypeIdentifaction.isSysexBeginOrEnd status then
                             sysex.Trigger bytes
-                            platformEvents.NoticeSysex(device, bytes)
+                            platformEvents.NoticeSysex({info = device }, bytes)
                         else
                             triggerMessageEvent systemMessage platformEvents.NoticeSystemMessage
                       else
@@ -141,7 +142,9 @@ type RtMidiMidinettePlatformImpl() =
             | :? RtMidiInfo as rtDevice ->
                 match rtDevice.info with
                 | :? RtMidi.Core.Devices.Infos.IMidiOutputDeviceInfo as device ->
-                    Some ({ outPort = device.CreateDevice() ; info = rtDevice} :> IMidiOutput<_,_>)
-                | _ -> None
+                    Some ({ outPort = device.CreateDevice() ; info = rtDevice} :> IMidiOutput<_>)
+                | _ ->
+                    printfn "oops %A" rtDevice.info
+                    None
             | _ -> None
             

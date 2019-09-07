@@ -77,12 +77,12 @@ module PlatformImplHelp =
     |> byte
     |> LanguagePrimitives.EnumOfValue 
 
-  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_,_,_,_>)=
+  let internal completeSysex deviceInfo (sysexState: ISysexInputState) (platform: MidiPlatformTrigger<_>)=
     if sysexState.SysexData.Length > 5 then
       (deviceInfo, sysexState.SysexData) |> platform.NoticeSysex
     sysexState.DisposeSysex ()
 
-  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_,_,_,_>)=
+  let internal processSysexMessage (deviceInfo) (sysexInput: ISysexInputState) message (platform: MidiPlatformTrigger<_>)=
     let mutable endEncountered = false
     for i in 0 .. 3 do
       if not endEncountered then
@@ -93,7 +93,7 @@ module PlatformImplHelp =
           completeSysex deviceInfo sysexInput platform
           endEncountered <- true
   
-  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_,_,_,_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
+  let processEvents (device: 'device) (events: 'event array) getDeviceInfo (platform: MidiPlatformTrigger<_>) makeMidiEvent getMessageWord (getSysexInputState: 'device -> ISysexInputState) =
     let deviceInfo = getDeviceInfo device
     let sysexInputState : ISysexInputState = getSysexInputState device
   

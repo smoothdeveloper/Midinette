@@ -4,7 +4,6 @@
      <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Midi.File.fs" />
     <Compile Include="Midi.fs" />
     <Compile Include="Midi.MessageMatching.fs" />
     <Compile Include="Midi.Nrpn.fs" />

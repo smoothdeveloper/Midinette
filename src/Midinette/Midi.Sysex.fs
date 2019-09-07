@@ -3,8 +3,6 @@ namespace Midinette.Sysex
 module Sysex =
   open System
   open System.Diagnostics
-  open Midi
-  open System.Net
   open Midinette.Platform
   let sysexDeviceInquiry =
     [|
@@ -45,12 +43,12 @@ module Sysex =
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
     |]
 
-  type DetectedDevice<'timestamp,'midievent,'midimessage> =
+  type DetectedDevice<'timestamp> =
     
-    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'midievent> * deviceInput: IMidiOutput<'timestamp,'midimessage>
-    | Error of exn * deviceOutput: IMidiInput<'midievent> * deviceInput: IMidiOutput<'timestamp,'midimessage>
+    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
+    | Error of exn * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
 
-  let deviceInquiry (inputPorts: IMidiInput<'midievent> array) (outputPorts: IMidiOutput<'timestamp,'midimessage> array) sysexMatcher doWithOutput withInputAndOutput =
+  let deviceInquiry (inputPorts: IMidiInput<'timestamp> array) (outputPorts: IMidiOutput<'timestamp> array) sysexMatcher doWithOutput withInputAndOutput =
     // maybe buggy
     let detectedPairs = [|
       let sysexInputTimeout = System.TimeSpan.FromSeconds 5.0
@@ -85,5 +83,3 @@ module Sysex =
         )
         
     )
-    //|> Array.map (Array.choose id)
-    //|> Array.collect id

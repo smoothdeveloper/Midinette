@@ -126,7 +126,7 @@ with
       Some (makeSysex deviceId messageId data)
     | _ -> None
   
-  member x.Send (deviceId: byte, midiOutput: IMidiOutput<_,_>, nowTimestamp) =
+  member x.Send (deviceId: byte, midiOutput: IMidiOutput<_>, nowTimestamp) =
     match x.MakeMTSSysex deviceId with
     | Some sysex -> midiOutput.WriteSysex (nowTimestamp())  sysex
     | None -> ()
