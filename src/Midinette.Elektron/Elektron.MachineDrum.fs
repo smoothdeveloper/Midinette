@@ -48,6 +48,7 @@ module MachineSpecs =
   let patterns = [|0uy..127uy|]
   let kits     = [|0uy..63uy|]
   let songs    = [|0uy..31uy|]
+  let globalSettings = [|0uy..7uy|]
 
 
   

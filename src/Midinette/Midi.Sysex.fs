@@ -51,7 +51,7 @@ module Sysex =
   let deviceInquiry (inputPorts: IMidiInput<'timestamp> array) (outputPorts: IMidiOutput<'timestamp> array) sysexMatcher doWithOutput withInputAndOutput =
     // maybe buggy
     let detectedPairs = [|
-      let sysexInputTimeout = System.TimeSpan.FromSeconds 5.0
+      let sysexInputTimeout = System.TimeSpan.FromSeconds 1.0
       for o in outputPorts do
         let responses =
           [|

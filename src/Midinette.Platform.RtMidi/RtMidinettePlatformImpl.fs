@@ -29,7 +29,7 @@ type InPortEvents<'timestamp> = {
 type RtMidiInfo = { info: RtMidi.Core.Devices.Infos.IMidiDeviceInfo }
 with
     interface IDeviceInfo with 
-        member d.Name = d.info.Name
+        member d.Name = d.info.Name.Trim()
 
 type RtMidiIn = { inPort: RtMidi.Core.Devices.IMidiInputDevice; info: RtMidiInfo; inEvents: InPortEvents<int64> }
 with
@@ -66,12 +66,12 @@ with
                     )
             rtMidiOut bytes x.outPort 
 
-type RtMidiMidinettePlatformImpl() =
+type RtMidiMidinettePlatformImpl() as this =
     let rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
     let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
-    
+    let iplatform = this :> IMidiPlatform<int64>
     member x.Trigger = platformEvents
     //member x.Platform = x :> IMidiPlatformEvents<_>
     
@@ -85,7 +85,9 @@ type RtMidiMidinettePlatformImpl() =
         [<CLIEvent>] member x.RealtimeMessageReceived = platformEventsPublish.RealtimeMessageReceived |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
         
     *)
+    
     interface IMidiPlatform<int64> with
+    
         member x.InputDevices =
             RtMidi.Core.MidiDeviceManager.Default.InputDevices
             |> Seq.map (fun d -> { info = d} :> IDeviceInfo)
@@ -147,4 +149,8 @@ type RtMidiMidinettePlatformImpl() =
                     printfn "oops %A" rtDevice.info
                     None
             | _ -> None
-            
+        
+    member x.InputDevices  = iplatform.InputDevices
+    member x.OutputDevices = iplatform.OutputDevices
+    member x.GetMidiOutput deviceInfo = iplatform.GetMidiOutput deviceInfo
+    member x.GetMidiInput deviceInfo = iplatform.GetMidiInput deviceInfo

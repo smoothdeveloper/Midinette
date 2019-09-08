@@ -9,7 +9,7 @@ nuget Fable.Core
 nuget Fable.Promise
 nuget Fable.Import.Browser
 nuget Fable.Import.WebMIDI
-nuget FSharp.Core
+nuget FSharp.Core = 4.6.2
 nuget fsnative
 nuget PortMidiSharp
 nuget RtMidi.Core = 1.0.59-alpha-3
