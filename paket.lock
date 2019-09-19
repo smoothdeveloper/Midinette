@@ -566,6 +566,8 @@ NUGET
     RtMidi.Core (1.0.59-alpha-3)
       Serilog (>= 2.8) - restriction: || (>= net45) (>= netstandard2.0)
       System.ValueTuple (>= 4.5) - restriction: || (>= net45) (>= netstandard2.0)
-
+GITHUB
+  remote: fsprojects/FSharp.UMX
+    src/FSharp.UMX.fs (3d887477c075ad498faa9f5c24844d2a2c6e5c12)
 GROUP Build
 RESTRICTION: >= net461

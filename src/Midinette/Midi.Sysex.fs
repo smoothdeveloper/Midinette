@@ -1,5 +1,6 @@
 
 namespace Midinette.Sysex
+open Midi
 module Sysex =
   open System
   open System.Diagnostics
@@ -17,7 +18,7 @@ module Sysex =
   let helpGetSysex maxMessage (timeout: TimeSpan) sysexIsMatching buildResponse (inPort: IMidiInput<_>) =
     let mutable response = None
     let mutable count = 0
-    let rec noticeSysex (sysex: byte array) =
+    let rec noticeSysex (sysex: sysex_data) =
       if Option.isNone response then
         if sysexIsMatching sysex then
           response <- Some (buildResponse sysex)
@@ -41,11 +42,11 @@ module Sysex =
       for i in 0 .. (Array.length data) - 1 do
         if data.[i] = 0xf0uy then beginIndex <- i
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
-    |]
+    |] |> UMX.tag_sysex_data
 
   type DetectedDevice<'timestamp> =
     
-    | DetectedDevice of responseData: byte array * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
+    | DetectedDevice of responseData: sysex_data * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
     | Error of exn * deviceOutput: IMidiInput<'timestamp> * deviceInput: IMidiOutput<'timestamp>
 
   let deviceInquiry (inputPorts: IMidiInput<'timestamp> array) (outputPorts: IMidiOutput<'timestamp> array) sysexMatcher doWithOutput withInputAndOutput =
@@ -81,5 +82,6 @@ module Sysex =
             | Choice1Of2(data) -> data
             | Choice2Of2 exn   -> Some (Error(exn, i, o))
         )
-        
     )
+    |> Array.concat
+    |> Array.choose id

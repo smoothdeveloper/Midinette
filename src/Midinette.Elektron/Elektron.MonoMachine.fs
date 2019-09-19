@@ -1,7 +1,8 @@
 module Elektron.MonoMachine
-
+open FSharp.UMX
 open System
 open Midi
+
 open Midinette.Platform
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
@@ -19,11 +20,11 @@ type LFOShape =
     match value with
     | _ -> failwithf "%i not defined" value
     
-    
 type LFOMultiplier = Times1 | Times2 | Times4 | Times8 | Times16 | Times32 | Times64
   
 module internal Helpers =
-  let monoMachineHeader = [|
+  let monoMachineHeader =
+    [|
       0xf0uy
       0x00uy
       0x20uy
@@ -31,9 +32,10 @@ module internal Helpers =
       0x03uy
       0x00uy
     |]
+    |> UMX.tag_sysex_data
 
   let makeSysexMessage message = 
-    let sysexEnd = [|0xf7uy|] 
+    let sysexEnd = [|UMX.tag_sysex_data 0xf7uy|] 
     Array.concat [|monoMachineHeader;message;sysexEnd|]
     
 open Helpers
@@ -58,8 +60,8 @@ with
     | SequencerMode     -> 0x10uy
     | AudioMode         -> 0x20uy
     | SequencerModeMode -> 0x21uy
-  static member FromByte v =
-    match v with
+  static member FromByte (v: byte<_>) =
+    match UMX.untag v with
     | 0x01uy -> GlobalSlot
     | 0x02uy -> KitNumber
     | 0x04uy -> PatternNumber
@@ -73,7 +75,7 @@ with
 type Track = Track1 | Track2 | Track3 | Track4 | Track5 | Track6
 with
   static member FromByte b =
-    match b with
+    match UMX.untag_byte_7bits b with
     | 0x0uy -> Track1
     | 0x1uy -> Track2
     | 0x2uy -> Track3
@@ -173,7 +175,7 @@ type MachineParameters(bytes: byte array) =
   member x.MIDI      = getBytes midiBase
   member x.ADSR      = getBytes adsrBase
 
-type MonoMachineKit (data: byte array) =
+type MonoMachineKit (data: sysex_data) =
   member x.Version          = data.[0x07]
   member x.Revision         = data.[0x08]
   member x.OriginalPosition = data.[0x09]
@@ -186,17 +188,17 @@ type MonoMachineKit (data: byte array) =
       |> dataToByte
     //else [||]
   member x.Name =
-    x.unpacked |> getSlice 0 11 |> ASCIIEncoding.ASCII.GetString
+    x.unpacked |> SysexBufferEdit.getSlice 0 11 |> unbox |> ASCIIEncoding.ASCII.GetString
   member x.Levels =
-    x.unpacked |> getSlice 0xb 6
+    x.unpacked |> SysexBufferEdit.getSlice 0xb 6
   member x.Parameters =
     x.unpacked 
-    |> getSlice 0x11 (72 * 6) 
+    |> SysexBufferEdit.getSlice 0x11 (72 * 6) 
     |> Array.chunkBySize 72 
     |> Array.map MachineParameters
   member x.Machines =
     x.unpacked
-    |> getSlice 0x1c1 6
+    |> SysexBufferEdit.getSlice 0x1c1 6
     |> Array.map ((&&&) 0b01111111uy)
     |> Array.map MonoMachineType.FromValue
 
@@ -214,57 +216,58 @@ with
     | Fixed v -> v
 
 type GlobalSettings = {
-  midiChannelAutoTrack    : byte
-  midiChannel             : byte
-  midiChannelMultiTrig    : byte
-  midiChannelMultiMap     : byte
-  midiMachineChannels     : byte array
-  ccDestinationsPerChannel: byte array array
+  midiChannelAutoTrack    : byte_7bits
+  midiChannel             : byte_7bits
+  midiChannelMultiTrig    : byte_7bits
+  midiChannelMultiMap     : byte_7bits
+  midiMachineChannels     : byte_7bits array
+  ccDestinationsPerChannel: byte_7bits array array
   programChangeIn         : bool
   velocityCurve           : VelocityCurve
-  fixedVelocity           : byte
-  knobSpeed               : byte
+  fixedVelocity           : byte_7bits
+  knobSpeed               : byte_7bits
   baseFrequency           : int
 }
 with
   static member Default =
     {
-      midiChannelAutoTrack= 8uy
-      midiChannel         = 0uy
-      midiChannelMultiTrig    = 7uy
-      midiChannelMultiMap     = 08uy
-      midiMachineChannels     = [|0uy .. 05uy|]
+      midiChannelAutoTrack    = UMX.tag_byte_7bits 8uy
+      midiChannel             = UMX.tag_byte_7bits 0uy
+      midiChannelMultiTrig    = UMX.tag_byte_7bits 7uy
+      midiChannelMultiMap     = UMX.tag_byte_7bits 08uy
+      midiMachineChannels     = UMX.tag_byte_7bits [|0uy .. 05uy|]
       ccDestinationsPerChannel= [||]
       programChangeIn         = true
       velocityCurve           = VelocityCurve.Linear
-      fixedVelocity           = 0uy
-      knobSpeed               = 0uy
+      fixedVelocity           = UMX.tag_byte_7bits 0uy
+      knobSpeed               = UMX.tag_byte_7bits 0uy
       baseFrequency           = 440
 
     }
-  static member FromSysex (sysexData: byte array) =
+  static member FromSysex (sysexData: sysex_data) =
     // note: this is just plain broken on hardware side
     if areMonoMachineCheckSumAndLengthValid sysexData then
       let globalData =
         (getMonoMachineDataSliceFromSysexMessage sysexData)
         |> Seq.toArray
-        |> Elektron.Platform.dataToByte
+        |> dataToByte
+        
       //if globalData.Length < 0x101 then None
       //else
       Some
           {
-          midiChannelAutoTrack     = globalData.[0x00]
-          midiChannel              = globalData.[0x01]
-          midiChannelMultiTrig     = globalData.[0x02]
-          midiChannelMultiMap      = globalData.[0x03]
+          midiChannelAutoTrack     = UMX.tag_byte_7bits globalData.[0x00]
+          midiChannel              = UMX.tag_byte_7bits globalData.[0x01]
+          midiChannelMultiTrig     = UMX.tag_byte_7bits globalData.[0x02]
+          midiChannelMultiMap      = UMX.tag_byte_7bits globalData.[0x03]
           midiMachineChannels      = [||]//globalData.[0x12..0x1]
 
           // external sync
           ccDestinationsPerChannel = [||]//[|globalData.[0x18..0x1]|]
           programChangeIn          = true //globalData.[0xfd] = 1uy
           velocityCurve            = VelocityCurve.Fixed 1uy //globalData.[0xff] |> VelocityCurve.FromByte
-          fixedVelocity            = 0uy //globalData.[0x100]
-          knobSpeed                = 0uy//globalData.[0x101]
+          fixedVelocity            = UMX.tag_byte_7bits 0uy //globalData.[0x100]
+          knobSpeed                = UMX.tag_byte_7bits 0uy//globalData.[0x101]
           baseFrequency            = 0 //globalData.[0x104..] |> Elektron.fourBytesToBigEndianInt
           }
     else
@@ -274,13 +277,13 @@ with
 type MonoMachineSysexResponse =
 | GlobalSettings of GlobalSettings
 | Kit of MonoMachineKit
-| Pattern of byte array
-| Song of byte array
-| StatusResponse of statusType: MonoMachineStatusType * value: byte
+| Pattern of sysex_data
+| Song of sysex_data
+| StatusResponse of statusType: MonoMachineStatusType * value: byte_7bits
 with
-  static member BuildResponse (bytes: byte array) =
-    match bytes.[6] with
-    | 72uy -> StatusResponse(MonoMachineStatusType.FromByte bytes.[7], bytes.[8])
+  static member BuildResponse (bytes: sysex_data) =
+    match UMX.untag_sysex bytes.[6] with
+    | 72uy -> StatusResponse(MonoMachineStatusType.FromByte bytes.[7], UMX.to_byte_7bits bytes.[8])
     | 0x50uy -> GlobalSettings (GlobalSettings.FromSysex(bytes).Value)
     | 0x52uy -> Kit (MonoMachineKit(bytes))
     | 0x67uy -> Pattern bytes
@@ -288,12 +291,12 @@ with
 
 
 type MonoMachineSysexRequests =
-| DumpGlobalSettings of globalSettingsIndex: byte
-| DumpKit of kit: byte
-| DumpPattern of pattern: byte
-| DumpSong of song: byte
+| DumpGlobalSettings of globalSettingsIndex: byte_7bits
+| DumpKit of kit: byte_7bits
+| DumpPattern of pattern: byte_7bits
+| DumpSong of song: byte_7bits
 | QueryStatus of statusType: MonoMachineStatusType
-| AssignMachine of track: byte * machine: MonoMachineType * parametersMode: AssignMachineParameterMode
+| AssignMachine of track: byte_7bits * machine: MonoMachineType * parametersMode: AssignMachineParameterMode
 with
   member x.MessageId = 
     match x with
@@ -306,13 +309,14 @@ with
   member x.Sysex =
     let data =
       match x with
-      | DumpGlobalSettings id -> id |> Array.singleton
-      | DumpKit kit           -> kit |> Array.singleton
-      | DumpPattern pattern   -> pattern |> Array.singleton
-      | DumpSong song         -> song |> Array.singleton
+      | DumpGlobalSettings id -> id        |> UMX.untag |> Array.singleton
+      | DumpKit kit           -> kit       |> UMX.untag |> Array.singleton
+      | DumpPattern pattern   -> pattern   |> UMX.untag |> Array.singleton
+      | DumpSong song         -> song      |> UMX.untag |> Array.singleton
       | QueryStatus status    -> status.Id |> Array.singleton
-      | AssignMachine (t,m,p) -> [|t;m.Value;p.Value|]
-    makeSysexMessage (Array.concat ([|x.MessageId |> Array.singleton; data|]))
+      | AssignMachine (t,m,p) -> [|UMX.untag t;UMX.untag m.Value;UMX.untag p.Value|]
+    let data = UMX.tag_sysex_data data
+    makeSysexMessage (Array.concat ([|x.MessageId |> UMX.tag_sysex_data |> Array.singleton; data|]))
   member x.ResponseMessageId =
     match x with
     | DumpGlobalSettings _ 
@@ -327,7 +331,7 @@ with
     | DumpKit _            -> Some <| Kit(MonoMachineKit data)
     | DumpPattern _        -> Some <| Pattern data
     | DumpSong _           -> Some <| Song data
-    | QueryStatus _        -> Some <| StatusResponse((MonoMachineStatusType.FromByte data.[monoMachineHeader.Length + 1]), data.[monoMachineHeader.Length + 2])
+    | QueryStatus _        -> Some <| StatusResponse((MonoMachineStatusType.FromByte data.[monoMachineHeader.Length + 1]), UMX.to_byte_7bits data.[monoMachineHeader.Length + 2])
     | AssignMachine(_)     -> failwithf "not implemented"
     //| _ -> None
 
@@ -347,8 +351,8 @@ type MonoMachine<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
           maxMessage 
           timeout 
           (fun sysex -> 
-              sysex.[0..5] = Helpers.monoMachineHeader 
-              && Some sysex.[6] = request.ResponseMessageId
+              sysex.[0..5] = monoMachineHeader 
+              && Some (UMX.untag_sysex sysex.[6]) = request.ResponseMessageId
           )
           request.BuildResponse
           inPort
@@ -647,7 +651,7 @@ type MonoMachineEvent =
 | Unknown of MidiMessage
 | UnknownNRPN of Midi.Nrpn.NRPNEvent
 | MonoMachineSysex of MonoMachineSysexResponse
-| Sysex of byte array
+| Sysex of sysex_data
 | KitChanged of byte
 | SequencerStarted
 | SequencerStopped
@@ -706,12 +710,12 @@ type MonoMachineEventListener<'timestamp>
     let settings = GlobalSettings.Default //settings |> Option.defaultValue 
     let message = midiEvent.Message
     let messageChannel = message.Channel.Value
-    let midiChannelIsTrack = messageChannel >= settings.midiChannel && messageChannel < (settings.midiChannel + 6uy)
+    let midiChannelIsTrack = messageChannel >= settings.midiChannel && messageChannel < (settings.midiChannel + (UMX.tag_byte_7bits 6uy))
     if midiChannelIsTrack then
-      let track = Track.FromByte (byte (messageChannel - settings.midiChannel))
+      let track = Track.FromByte (messageChannel - settings.midiChannel)
       match message with
-      | NoteOn (_, note, velocity)  -> TrackTrigger(track, note, velocity)
-      | NoteOff (_, note, velocity) -> TrackRelease(track, note, velocity)
+      | NoteOn (_, note, velocity)  -> TrackTrigger(track, UMX.tag note, velocity)
+      | NoteOff (_, note, velocity) -> TrackRelease(track, UMX.tag note, velocity)
       | ProgramChange {program = program} ->
         let locator = PatternLocator.FromByte program
         PatternSelected(locator)

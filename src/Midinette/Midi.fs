@@ -1,4 +1,5 @@
 namespace rec Midi
+open FSharp.UMX
 open MidiMessageTypeIdentifaction
 [<Struct>]
 type MidiNote = 
@@ -108,7 +109,7 @@ module MidiMessageTypeIdentifaction =
 
 
 type [<Struct>] MidiMessage private(value:int) =
-  static member StatusWithChannel (messageType: MidiMessageType) channel = byte messageType + channel
+  static member StatusWithChannel (messageType: MidiMessageType) channel = byte messageType + (UMX.untag_byte_7bits channel)
   static member NoteWithOctave (note: MidiNote) (octave: byte) = (octave * 12uy) + (byte note)
   static member GetNoteAndOctave (midiNoteNumber: byte) =
     let octave = midiNoteNumber / 12uy
@@ -122,12 +123,12 @@ type [<Struct>] MidiMessage private(value:int) =
       ||| ((int status) &&& 0xff)
     )
 
-  static member EncodeChannelMessage (messageType: MidiMessageType) (channel: byte) (data1: byte) (data2: byte) =
-    MidiMessage.Encode (MidiMessage.StatusWithChannel messageType channel) data1 data2
-  static member NoteOn channel note velocity  = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOn channel note velocity
-  static member NoteOff channel note velocity = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOff channel note velocity
+  static member EncodeChannelMessage (messageType: MidiMessageType) (channel: byte<_>) data1 data2 =
+    MidiMessage.Encode (MidiMessage.StatusWithChannel messageType (UMX.to_byte_7bits channel)) (data1) (data2)
+  static member NoteOn channel (note: byte<_>) (velocity: byte<_>) = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOn channel (UMX.untag note) (UMX.untag velocity)
+  static member NoteOff channel (note: byte<_>) (velocity: byte<_>) = MidiMessage.EncodeChannelMessage MidiMessageType.NoteOff channel (UMX.untag note) (UMX.untag velocity)
   static member ProgramChange channel program = MidiMessage.EncodeChannelMessage MidiMessageType.ProgramChange channel program 0uy
-  static member CC channel control value      = MidiMessage.EncodeChannelMessage MidiMessageType.ControllerChange channel control value
+  static member CC (channel: byte<_>) (control: byte<_>) (value: byte<_>) = MidiMessage.EncodeChannelMessage MidiMessageType.ControllerChange (UMX.tag (UMX.untag channel)) (UMX.untag control) (UMX.untag value)
   static member FromWord word = MidiMessage word
   member x.Word = value
   member x.Status = byte (value &&& 0xff)
@@ -144,7 +145,7 @@ type [<Struct>] MidiMessage private(value:int) =
     
   member x.Channel =
     if x.IsChannelMessage then
-      Some (x.Status &&& 0b00001111uy)
+      Some (UMX.tag_byte_7bits (x.Status &&& 0b00001111uy))
     else
       None
   override x.ToString () = 
@@ -163,7 +164,7 @@ type [<Struct>] MidiEvent<'timestamp> (message: MidiMessage, timestamp: 'timesta
   member __.Message = message
   member __.Timestamp = timestamp
 
-
+  
 (*
 module MidiProgram =
   let change channel program (output: IMidiOutput<'timestamp>) =

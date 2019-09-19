@@ -1,9 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
-     <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
+    <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\paket-files\fsprojects\FSharp.UMX\src\FSharp.UMX.fs">
+      <Paket>True</Paket>
+      <Link>paket-files/FSharp.UMX.fs</Link>
+    </Compile>
+    <Compile Include="UMX.fs" />
     <Compile Include="Midi.fs" />
     <Compile Include="Midi.MessageMatching.fs" />
     <Compile Include="Midi.Nrpn.fs" />

@@ -15,7 +15,7 @@ type IMidiInput<'timestamp> =
   [<CLIEvent>] abstract member Error : IEvent<string>
   [<CLIEvent>] abstract member ChannelMessageReceived : IEvent<MidiEvent<'timestamp>>
   [<CLIEvent>] abstract member SystemMessageReceived : IEvent<MidiEvent<'timestamp>>
-  [<CLIEvent>] abstract member SysexReceived : IEvent<byte array>
+  [<CLIEvent>] abstract member SysexReceived : IEvent<sysex_data>
   [<CLIEvent>] abstract member RealtimeMessageReceived : IEvent<MidiEvent<'timestamp>>
   abstract member Open: bufferSize:int -> unit
   abstract member Close: unit -> unit
@@ -24,7 +24,7 @@ type IMidiInput<'timestamp> =
 type IMidiOutput<'timestamp> =
   abstract member WriteMessage:  timestamp:'timestamp -> midiMessage: MidiMessage        -> unit
   abstract member WriteMessages: timestamp:'timestamp -> midiMessages: MidiMessage array -> unit
-  abstract member WriteSysex:    timestamp:'timestamp -> data:byte array                 -> unit
+  abstract member WriteSysex:    timestamp:'timestamp -> data:sysex_data -> unit
   abstract member Open:          bufferSize:int       -> latency: int                    -> unit
   abstract member Close:         unit                                                    -> unit
   abstract member DeviceInfo : IDeviceInfo

@@ -2,10 +2,10 @@
 
 open System.Reflection
 open Midinette.Platform
-
+open Midi
 module Impl =
     let toBytes (message: Midi.MidiMessage) = [|message.Status;message.Data1;message.Data2|]
-    let rtMidiOut (bytes: byte array) port =
+    let rtMidiOut bytes port =
         let f = port.GetType().GetField("_outputDevice", BindingFlags.NonPublic ||| BindingFlags.Instance)
         let rtoutport = f.GetValue port
         let sendmethod = rtoutport.GetType().GetMethod "SendMessage"
@@ -22,7 +22,7 @@ type InPortEvents<'timestamp> = {
   error : Event<string>  
   channelMessage : Event<Midi.MidiEvent<'timestamp>>
   systemMessage: Event<Midi.MidiEvent<'timestamp>>
-  sysex: Event<byte array>
+  sysex: Event<sysex_data>
   realtimeMessage: Event<Midi.MidiEvent<'timestamp>>
 }
 
@@ -126,7 +126,7 @@ type RtMidiMidinettePlatformImpl() as this =
                         triggerMessageEvent realtimeMessage platformEvents.NoticeRealtimeMessage
                       elif MidiMessageTypeIdentifaction.isSystemMessage status then
                         if MidiMessageTypeIdentifaction.isSysexBeginOrEnd status then
-                            sysex.Trigger bytes
+                            sysex.Trigger (UMX.tag_sysex_data bytes)
                             platformEvents.NoticeSysex({info = device }, bytes)
                         else
                             triggerMessageEvent systemMessage platformEvents.NoticeSystemMessage

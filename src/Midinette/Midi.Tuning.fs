@@ -44,6 +44,7 @@ let makeSysex deviceId (messageId: MessageId) data =
     |]
   |]
   |> Array.concat
+  |> UMX.tag_sysex_data
 
 type NoteTuning =
   {

@@ -5,6 +5,7 @@ source https://nuget.org/api/v2
 storage: none
 redirects: force
 clitool dotnet-fable
+github fsprojects/FSharp.UMX src/FSharp.UMX.fs
 nuget Fable.Core
 nuget Fable.Promise
 nuget Fable.Import.Browser

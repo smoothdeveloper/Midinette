@@ -1,4 +1,4 @@
-module Elektron.MachineDrum
+namespace Elektron.MachineDrum
 open Elektron
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
@@ -8,6 +8,8 @@ open System
 open System.Diagnostics
 open Midi
 open Midinette.Platform
+open Midinette.Sysex
+
 (*
 [<RequireQualifiedAccess>]
 type LFOType =
@@ -27,6 +29,18 @@ with
     | Trig -> 1uy
     | Hold -> 2uy
 *)
+module Sysex =
+  let mdHeader =
+    [|
+      0xf0uy
+      0x00uy
+      0x20uy
+      0x3cuy
+      0x02uy
+      0x00uy
+    |] 
+    |> UMX.tag_sysex_data
+
 [<Struct>]
 type LFOType = private SDULFOType of byte
 with
@@ -35,7 +49,7 @@ with
   static member Hold = SDULFOType 2uy
 
   static member FromByte b =
-    match b with
+    match UMX.untag_byte_7bits b with
     | 0uy -> LFOType.Free
     | 1uy -> LFOType.Trig
     | 2uy -> LFOType.Hold
@@ -45,13 +59,13 @@ with
 
 
 module MachineSpecs =
-  let patterns = [|0uy..127uy|]
-  let kits     = [|0uy..63uy|]
-  let songs    = [|0uy..31uy|]
-  let globalSettings = [|0uy..7uy|]
+  let patterns       = UMX.tag_byte_7bits [|0uy..127uy|]
+  let kits           = UMX.tag_byte_7bits [|0uy..63uy|]
+  let songs          = UMX.tag_byte_7bits [|0uy..31uy|]
+  let globalSettings = UMX.tag_byte_7bits [|0uy..7uy|]
 
 
-  
+
 [<RequireQualifiedAccess>]
 type Track =
 | BD | SD | HT | MT
@@ -59,32 +73,35 @@ type Track =
 | CH | OH | RC | CC
 | M1 | M2 | M3 | M4
 with
-  static member trackValue =
-    function
+  static member trackValue track =
+    match track with
     | BD -> 0x0uy | SD -> 0x1uy | HT -> 0x2uy | MT -> 0x3uy
     | LT -> 0x4uy | CP -> 0x5uy | RS -> 0x6uy | CB -> 0x7uy 
     | CH -> 0x8uy | OH -> 0x9uy | RC -> 0xauy | CC -> 0xbuy 
     | M1 -> 0xcuy | M2 -> 0xduy | M3 -> 0xeuy | M4 -> 0xfuy
-  static member trackForValue =
-    function
+    |> UMX.tag_byte_7bits
+
+  static member trackForValue (value: byte_7bits) =
+    match UMX.untag_byte_7bits value with
     | 0x0uy -> BD | 0x1uy -> SD | 0x2uy -> HT | 0x3uy -> MT
     | 0x4uy -> LT | 0x5uy -> CP | 0x6uy -> RS | 0x7uy -> CB 
     | 0x8uy -> CH | 0x9uy -> OH | 0xauy -> RC | 0xbuy -> CC 
     | 0xcuy -> M1 | 0xduy -> M2 | 0xeuy -> M3 | 0xfuy -> M4
     | v -> failwithf "channel %i" v
-  static member midiBaseChannelOffset =
-    function
+  static member midiBaseChannelOffset track =
+    match track with
     | BD | SD | HT | MT -> 0uy
     | LT | CP | RS | CB -> 1uy
     | CH | OH | RC | CC -> 2uy
     | M1 | M2 | M3 | M4 -> 3uy
-  static member baseCCParameter =
-    function
+    |> UMX.tag_byte_7bits
+  static member baseCCParameter track =
+    match track with
     | BD | LT | CH | M1 -> 16uy
     | SD | CP | OH | M2 -> 40uy
     | HT | RS | RC | M3 -> 72uy
     | MT | CB | CC | M4 -> 96uy
-
+    |> UMX.tag_byte_7bits
   static member allTracks =
     [|
       BD ; SD ; HT ; MT
@@ -182,8 +199,17 @@ type MDTrackParameter =
 | Distortion          | Volume            | Pan               | DelaySend
 | ReverbSend          | LFOSpeed          | LFOAmount         | LFOShapeMix
 with
-  static member fromCCOffset =
-    function
+  static member all = [|
+    MachineParameter1   ; MachineParameter2 ; MachineParameter3 ; MachineParameter4
+    MachineParameter5   ; MachineParameter6 ; MachineParameter7 ; MachineParameter8
+    AMDepth             ; AMRate            ; EQFreq            ; EQGain
+    FilterBaseFrequency ; FilterWidth       ; FilterQ           ; SampleRateReduction
+    Distortion          ; Volume            ; Pan               ; DelaySend
+    ReverbSend          ; LFOSpeed          ; LFOAmount         ; LFOShapeMix    
+        
+  |]
+  static member fromCCOffset offset =
+    match UMX.untag_byte_7bits offset with
     | 00uy -> MachineParameter1  | 01uy -> MachineParameter2 | 02uy -> MachineParameter3 | 03uy -> MachineParameter4  
     | 04uy -> MachineParameter5  | 05uy -> MachineParameter6 | 06uy -> MachineParameter7 | 07uy -> MachineParameter8  
     | 08uy -> AMDepth            | 09uy -> AMRate            | 10uy -> EQFreq            | 11uy -> EQGain             
@@ -191,20 +217,21 @@ with
     | 16uy -> Distortion         | 17uy -> Volume            | 18uy -> Pan               | 19uy -> DelaySend          
     | 20uy -> ReverbSend         | 21uy -> LFOSpeed          | 22uy -> LFOAmount         | 23uy -> LFOShapeMix        
     | v -> failwithf "unknown cc offset: %i" v
-  static member getCCOffset =
-    function
+  static member getCCOffset parameter =
+    match parameter with
     | MachineParameter1   -> 00uy | MachineParameter2 -> 01uy | MachineParameter3 -> 02uy | MachineParameter4   -> 03uy
     | MachineParameter5   -> 04uy | MachineParameter6 -> 05uy | MachineParameter7 -> 06uy | MachineParameter8   -> 07uy
     | AMDepth             -> 08uy | AMRate            -> 09uy | EQFreq            -> 10uy | EQGain              -> 11uy
     | FilterBaseFrequency -> 12uy | FilterWidth       -> 13uy | FilterQ           -> 14uy | SampleRateReduction -> 15uy
     | Distortion          -> 16uy | Volume            -> 17uy | Pan               -> 18uy | DelaySend           -> 19uy
     | ReverbSend          -> 20uy | LFOSpeed          -> 21uy | LFOAmount         -> 22uy | LFOShapeMix         -> 23uy
+    |> UMX.tag_byte_7bits
   static member GetCCForTrack parameter track =
     let baseCC = Track.baseCCParameter track
     let offset = MDTrackParameter.getCCOffset parameter
     baseCC + offset
-  static member GetParameterForCC cc =
-    match cc with
+  static member GetParameterForCC (cc: byte_7bits) =
+    match UMX.untag_byte_7bits cc with
     | 16uy | 40uy | 72uy |  96uy -> MachineParameter1
     | 17uy | 41uy | 73uy |  97uy -> MachineParameter2
     | 18uy | 42uy | 74uy |  98uy -> MachineParameter3
@@ -230,35 +257,35 @@ with
     | 38uy | 62uy | 94uy | 118uy -> LFOAmount
     | 39uy | 63uy | 95uy | 119uy -> LFOShapeMix
     | i   -> failwithf "unknown parameter for cc %i" i
-type MDMachineSettings(bytes: byte array, offset: int, machineType: MDMachineType) =
+type MDMachineSettings(bytes: sysex_data, offset: int, machineType: MDMachineType) =
   let baseAddress = 0x1a + (offset * 24)
-  let getAt a = bytes.[baseAddress + a]
-  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
-  member x.SynthesisParameters = getSlice baseAddress 8 bytes
-  member x.Parameter1                   = bytes.[baseAddress + 0]
-  member x.Parameter2                   = bytes.[baseAddress + 1]
-  member x.Parameter3                   = bytes.[baseAddress + 2]
-  member x.Parameter4                   = bytes.[baseAddress + 3]
-  member x.Parameter5                   = bytes.[baseAddress + 4]
-  member x.Parameter6                   = bytes.[baseAddress + 5]
-  member x.Parameter7                   = bytes.[baseAddress + 6]
-  member x.Parameter8                   = bytes.[baseAddress + 7]
-  member x.AmplitudeModulationDepth     = bytes.[baseAddress + 8]
-  member x.AmplitudeModulationFrequency = bytes.[baseAddress + 9]
-  member x.EqualizerFrequency           = bytes.[baseAddress + 10]
-  member x.EqualizerQ                   = bytes.[baseAddress + 11]
-  member x.FilterBase                   = bytes.[baseAddress + 12]
-  member x.FilterWidth                  = bytes.[baseAddress + 13]
-  member x.FilterResonnance             = bytes.[baseAddress + 14]
-  member x.SampleRateReduction          = bytes.[baseAddress + 15]
-  member x.Distortion                   = bytes.[baseAddress + 16]
-  member x.Volume                       = bytes.[baseAddress + 17]
-  member x.Pan                          = bytes.[baseAddress + 18]
-  member x.DelaySend                    with get () = getAt 19 and set v   = setAt 19 v
-  member x.ReverbSend                   with get () = getAt 20 and set v   = setAt 20 v
-  member x.LFOSpeed                     = bytes.[baseAddress + 21]
-  member x.LFODepth                     = bytes.[baseAddress + 22]
-  member x.LFOShapeMix                  = bytes.[baseAddress + 23]
+  let getAt a : byte_7bits    = UMX.to_byte_7bits bytes.[baseAddress + a]
+  let setAt a (v: byte_7bits) = bytes.[baseAddress + a] <- UMX.tag_sysex_data ((UMX.untag_byte_7bits v) &&& 0b01111111uy)
+  member x.SynthesisParameters          = UMX.to_byte_7bits (SysexBufferEdit.getSlice baseAddress 8 bytes)
+  member x.Parameter1                   = UMX.to_byte_7bits bytes.[baseAddress + 0]
+  member x.Parameter2                   = UMX.to_byte_7bits bytes.[baseAddress + 1]
+  member x.Parameter3                   = UMX.to_byte_7bits bytes.[baseAddress + 2]
+  member x.Parameter4                   = UMX.to_byte_7bits bytes.[baseAddress + 3]
+  member x.Parameter5                   = UMX.to_byte_7bits bytes.[baseAddress + 4]
+  member x.Parameter6                   = UMX.to_byte_7bits bytes.[baseAddress + 5]
+  member x.Parameter7                   = UMX.to_byte_7bits bytes.[baseAddress + 6]
+  member x.Parameter8                   = UMX.to_byte_7bits bytes.[baseAddress + 7]
+  member x.AmplitudeModulationDepth     = UMX.to_byte_7bits bytes.[baseAddress + 8]
+  member x.AmplitudeModulationFrequency = UMX.to_byte_7bits bytes.[baseAddress + 9]
+  member x.EqualizerFrequency           = UMX.to_byte_7bits bytes.[baseAddress + 10]
+  member x.EqualizerQ                   = UMX.to_byte_7bits bytes.[baseAddress + 11]
+  member x.FilterBase                   = UMX.to_byte_7bits bytes.[baseAddress + 12]
+  member x.FilterWidth                  = UMX.to_byte_7bits bytes.[baseAddress + 13]
+  member x.FilterResonnance             = UMX.to_byte_7bits bytes.[baseAddress + 14]
+  member x.SampleRateReduction          = UMX.to_byte_7bits bytes.[baseAddress + 15]
+  member x.Distortion                   = UMX.to_byte_7bits bytes.[baseAddress + 16]
+  member x.Volume                       = UMX.to_byte_7bits bytes.[baseAddress + 17]
+  member x.Pan                          = UMX.to_byte_7bits bytes.[baseAddress + 18]
+  member x.DelaySend  with get () = getAt 19 and set v = setAt 19 v
+  member x.ReverbSend with get () = getAt 20 and set v = setAt 20 v
+  member x.LFOSpeed                     = UMX.to_byte_7bits bytes.[baseAddress + 21]
+  member x.LFODepth                     = UMX.to_byte_7bits bytes.[baseAddress + 22]
+  member x.LFOShapeMix                  = UMX.to_byte_7bits bytes.[baseAddress + 23]
   member x.GetTrackParameters =
     [|
       MachineParameter1   , x.Parameter1
@@ -294,8 +321,8 @@ type LFOShape =
 | ExponentialDecay
 | Random
 with
-  static member FromByte =
-    function
+  static member FromByte b =
+    match UMX.untag_byte_7bits b with
     | 0uy -> Triangle
     | 1uy -> Saw
     | 2uy -> Square
@@ -312,14 +339,15 @@ with
     | ExponentialDecay -> 4uy
     | Random           -> 5uy
 
-type MDLFOSetting(bytes: byte array) =
-  member x.DestinationTrack = bytes.[0] |> Track.trackForValue
-  member x.DestinationParam = bytes.[1]
-  member x.Shape1           = bytes.[2] |> LFOShape.FromByte
-  member x.Shape2           = bytes.[3] |> LFOShape.FromByte
-  member x.LFOType          = bytes.[4] |> LFOType.FromByte
-  member x.Rest             = bytes |> getSlice 5 31
-  member x.TargetsAnotherLFO = x.DestinationParam >= 21uy
+type MDLFOSetting(bytes: bytes) =
+  // sppoooky
+  member x.DestinationTrack = bytes.[0] |> UMX.to_byte_7bits |> Track.trackForValue
+  member x.DestinationParam = bytes.[1] |> UMX.to_byte_7bits 
+  member x.Shape1           = bytes.[2] |> UMX.to_byte_7bits |> LFOShape.FromByte
+  member x.Shape2           = bytes.[3] |> UMX.to_byte_7bits |> LFOShape.FromByte
+  member x.LFOType          = bytes.[4] |> UMX.to_byte_7bits |> LFOType.FromByte
+  member x.Rest             = bytes |> SysexBufferEdit.getSlice 5 31 |> UMX.tag_byte_7bits
+  member x.TargetsAnotherLFO = UMX.untag_byte_7bits x.DestinationParam >= 21uy
 
 [<RequireQualifiedAccess>]
 type DelayParameter =
@@ -387,7 +415,7 @@ with
     | LowPass    -> 5uy
     | GateTime   -> 6uy
     | Level      -> 7uy
-
+    >> UMX.tag_byte_7bits
 [<RequireQualifiedAccess>]
 type EqualizerParameter =
 | LowShelfFrequency
@@ -434,10 +462,10 @@ with
     | 7uy -> Mix
     | v -> failwithf "unknown CompressorParameter: %i" v
 
-type EqualizerSettings(bytes: byte array) =
+type EqualizerSettings(bytes: sysex_data) =
   let baseAddress = 0x497
-  let getAt a = bytes.[baseAddress + a]
-  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
+  let getAt = SysexBufferEdit.getAt bytes baseAddress
+  let setAt = SysexBufferEdit.setAt bytes baseAddress
   member x.LowShelfFrequency   with get () = getAt 0 and set v = setAt 0 v
   member x.LowShelfGain        with get () = getAt 1 and set v = setAt 1 v
   member x.HighShelfFrequency  with get () = getAt 2 and set v = setAt 2 v
@@ -447,10 +475,10 @@ type EqualizerSettings(bytes: byte array) =
   member x.ParametricQ         with get () = getAt 6 and set v = setAt 6 v
   member x.Gain                with get () = getAt 7 and set v = setAt 7 v
 
-type CompressorSettings(bytes: byte array) =
+type CompressorSettings(bytes: sysex_data) =
   let baseAddress = 0x49f
-  let getAt a = bytes.[baseAddress + a]
-  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
+  let getAt = SysexBufferEdit.getAt bytes baseAddress
+  let setAt = SysexBufferEdit.setAt bytes baseAddress
   member x.Attack            with get () = getAt 0 and set v = setAt 0 v
   member x.Release           with get () = getAt 1 and set v = setAt 1 v
   member x.Threshold         with get () = getAt 2 and set v = setAt 2 v
@@ -471,10 +499,10 @@ type CompressorSettings(bytes: byte array) =
 
 
 
-type DelaySettings(bytes: byte array) =
+type DelaySettings(bytes: sysex_data) =
   let baseAddress = 0x48f
-  let getAt a = bytes.[baseAddress + a]
-  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
+  let getAt = SysexBufferEdit.getAt bytes baseAddress
+  let setAt = SysexBufferEdit.setAt bytes baseAddress
   member x.Time                with get () = getAt 0 and set v = setAt 0 v
   member x.Modulation          with get () = getAt 1 and set v = setAt 1 v
   member x.ModulationFrequency with get () = getAt 2 and set v = setAt 2 v
@@ -484,10 +512,10 @@ type DelaySettings(bytes: byte array) =
   member x.Mono                with get () = getAt 6 and set v = setAt 6 v
   member x.Level               with get () = getAt 7 and set v = setAt 7 v
 
-type ReverbSettings(bytes: byte array) =
+type ReverbSettings(bytes: sysex_data) =
   let baseAddress = 0x487
-  let getAt a = bytes.[baseAddress + a]
-  let setAt a v = bytes.[baseAddress + a] <- (v &&& 0b01111111uy)
+  let getAt = SysexBufferEdit.getAt bytes baseAddress
+  let setAt = SysexBufferEdit.setAt bytes baseAddress
   member x.DelayToReverb with get () = getAt 0 and set v = setAt 0 v
   member x.PreDelay      with get () = getAt 1 and set v = setAt 1 v
   member x.Decay         with get () = getAt 2 and set v = setAt 2 v
@@ -518,34 +546,57 @@ type ReverbSettings(bytes: byte array) =
     | ReverbParameter.GateTime   -> x.GateTime <- value
     | ReverbParameter.Level      -> x.Level <- value
 
-type TrigGroups(bytes: byte array) =
+type TrigGroups(bytes: bytes) =
   member x.GetTrig track =
     let index = int (Track.trackValue track)
-    let value = bytes.[index]
+    let value = UMX.untag_sysex bytes.[index]
     if value < 16uy then
-      Some (Track.trackForValue value)
+      Some (Track.trackForValue (UMX.tag_byte_7bits value))
     else
       None
   member x.GetMute track =
     let index = int (Track.trackValue track)
-    let value = bytes.[index + 16]
+    let value = UMX.untag_sysex bytes.[index + 16]
     if value < 16uy then
-      Some (Track.trackForValue value)
+      Some (Track.trackForValue (UMX.tag_byte_7bits value))
     else
       None
 
-type MDKit(bytes: byte array) =
-  let setDataSlice s l = setSlice s l bytes
-  let getDataSlice s l = getSlice s l bytes
+module Fooppp =
+  let encode14bits l =
+    [|
+      byte ((l &&& (0b1111111 <<< 7) >>> 7))
+      byte (l &&& 0b1111111)
+    |]
+    |> unbox
+
+  let checksum bytes =
+      let sum = bytes |> Array.map int |> Array.sum
+      encode14bits sum
+
+  let makeMessage messageType version revision data =
+    [|
+      yield! Sysex.mdHeader
+      yield  messageType
+      yield  version
+      yield  revision
+      yield! data
+      yield! checksum data
+      yield! encode14bits (data.Length + 2 + 2)
+    |]
+open Midi
+
+type MDKit private (bytes: sysex_data) =
+  //private new (bytes: byte array) = { bytes = bytes }
+  let setDataSlice s l = SysexBufferEdit.setSlice s l bytes
+  let getDataSlice s l : data = UMX.to_byte_7bits(SysexBufferEdit.getSlice s l bytes)
   member x.data = bytes
   member x.Position = bytes.[0x09]
-  
-  
   #if FABLE_COMPILER
   #else
   member x.Name     
-    with get ()         = getDataSlice 0x0a 16 |> ASCIIEncoding.Default.GetString
-    and set (v: string) = setDataSlice 0x0a 16 (ASCIIEncoding.Default.GetBytes v)
+    with get ()         = getDataSlice 0x0a 16 |> unbox |> ASCIIEncoding.Default.GetString
+    and set (v: string) = setDataSlice 0x0a 16 (unbox (ASCIIEncoding.Default.GetBytes v))
   #endif
   member x.ReverbSettings = ReverbSettings bytes
   member x.DelaySettings = DelaySettings bytes
@@ -560,7 +611,9 @@ type MDKit(bytes: byte array) =
   member x.SelectedDrumModel =
     let address = 0x1aa
     getDataSlice address 74 
+    |> unbox
     |> dataToByte
+    |> unbox
     |> Array.chunkBySize 4
     |> Array.map fourBytesToBigEndianInt
     |> Array.mapi (fun index i ->
@@ -589,23 +642,16 @@ type MDKit(bytes: byte array) =
           //MD (MDMachine.GND_EM)
     )
   member x.AssignDrumModel track drumModel =
-    
-    //let models = x.SelectedDrumModel
     let index = int (Track.trackValue track)
-    //models.[index] <- drumModel
-    
     let address = 0x1aa
     let newBytes = 
       match drumModel with 
       | MD machine -> [|0uy; 0uy; 0uy; byte machine|]
       | MDUW machine -> [|0uy; 0uy; 0uy; (byte machine ||| 0b10000000uy)|]
-    
-    let drumModelSlice = getDataSlice address 74 |> dataToByte
-    setSlice (index * 4) 4 drumModelSlice newBytes
+    let drumModelSlice = getDataSlice address 74 |> unbox |> dataToByte
+    SysexBufferEdit.setSlice (index * 4) 4 drumModelSlice (unbox newBytes)
 
-    setDataSlice address 74 (drumModelSlice |> byteToData)
-
-
+    setDataSlice address 74 (unbox (drumModelSlice |> byteToData))
   member x.MachineParameters =
     Array.init x.SelectedDrumModel.Length (fun i -> MDMachineSettings(bytes, i, x.SelectedDrumModel.[i]))
   member x.LFOSettings =
@@ -622,8 +668,17 @@ type MDKit(bytes: byte array) =
   member x.TrackLevels =
     let address = 0x19a
     getDataSlice address 16
-  static member SelectedDrumModelAllEmpty (kit: MDKit) =
-    kit.SelectedDrumModel = Array.create 16 (MDMachineType.MD MDMachine.GND_EM)
+  override x.Equals other =
+    match other with
+    | :? MDKit as other -> bytes = other.data
+    | _ -> false
+  override x.GetHashCode () = hash bytes
+
+
+  static member empty = 
+    [||]
+  static member fromSysex bytes =  MDKit bytes
+  static member drumModelsAreAllEmpty (kit: MDKit) = kit.SelectedDrumModel = Array.create 16 (MDMachineType.MD MDMachine.GND_EM)
 
 
 type MDTempoMultiplier =
@@ -632,18 +687,14 @@ type MDTempoMultiplier =
 | ThreeOverFour
 | ThreeOverTwo
 
-let inline getSlice offset length (array : _ array) =
-  array.[offset .. (offset + length - 1)]
-
-type MDPattern(bytes: byte array) =
+type MDPattern(bytes: sysex_data) =
   let isLongFormat =
     bytes.Length > 0x1521
   let getBytes offset length =
     bytes 
-    |> getSlice offset length
+    |> SysexBufferEdit.getDataSlice offset length
     |> dataToByte
     
-  //let getSlice offset length array =
   let extraPatternInfo =
     if isLongFormat then
       getBytes 0xac6 2647
@@ -658,21 +709,25 @@ type MDPattern(bytes: byte array) =
   member x.TrigPattern      = 
     let baseTrigs = getBytes 0xa 74
     if isLongFormat then
-      Array.concat [baseTrigs; getSlice 0x0 0x40 extraPatternInfo]
+      Array.concat [baseTrigs; SysexBufferEdit.getSlice 0x0 0x40 extraPatternInfo]
     else
       baseTrigs
   member x.TempoMultiplier  =
-    match bytes.[0xb3] with
+    match UMX.untag_sysex bytes.[0xb3] with
     | 0uy -> One
     | 1uy -> Two
     | 2uy -> ThreeOverFour
     | 3uy -> ThreeOverTwo
     | x -> failwithf "%i" x
-  member x.Scale = (bytes.[0xb4] + 1uy) * 16uy
+  member x.Scale = (UMX.untag_sysex (bytes.[0xb4]) + 1uy) * 16uy
   member x.Kit = bytes.[0xb5]
   member x.Locks = getBytes 0xb7 2341
-
-type MDSong(bytes: byte array) =
+  override x.GetHashCode () = hash bytes
+  override x.Equals other =
+    match other with
+    | :? MDPattern as other -> x.data = other.data
+    | _ -> false
+type MDSong(bytes: sysex_data) =
   member x.data = bytes
 
 type MachineDrumStatusType =
@@ -684,15 +739,17 @@ type MachineDrumStatusType =
 | LockMode
 with
   member x.Id =
-    match x with
-    | GlobalSlot    -> 0x01uy
-    | KitNumber     -> 0x02uy
-    | PatternNumber -> 0x04uy
-    | SongNumber    -> 0x08uy
-    | SequencerMode -> 0x10uy
-    | LockMode      -> 0x20uy
-  static member FromByte =
-    function
+    UMX.tag_byte_7bits (
+      match x with
+      | GlobalSlot    -> 0x01uy
+      | KitNumber     -> 0x02uy
+      | PatternNumber -> 0x04uy
+      | SongNumber    -> 0x08uy
+      | SequencerMode -> 0x10uy
+      | LockMode      -> 0x20uy
+    )
+  static member FromByte (b: byte) =
+    match b with
     | 0x01uy -> GlobalSlot
     | 0x02uy -> KitNumber
     | 0x04uy -> PatternNumber
@@ -729,8 +786,8 @@ type KeyMapStructure(bytes: byte array) =
     | 0x80uy -> PatternBank.H
     | v -> failwithf "bank %i" v
   let getTriggerType (value: byte) =
-    if value < 0x10uy then   TriggerChannel (Track.trackForValue value)
-    elif value < 0x8fuy then TriggerPattern (PatternLocator.PatternLocator(bankForValue value, value &&& 0xfuy))
+    if value < 0x10uy then   TriggerChannel (Track.trackForValue (UMX.tag_byte_7bits value))
+    elif value < 0x8fuy then TriggerPattern (PatternLocator.PatternLocator(bankForValue value, UMX.tag_byte_7bits ( value &&& 0xfuy)))
     else                     UnknownTrigger (value)
    
   let triggers =
@@ -766,7 +823,7 @@ type KeyMapStructure(bytes: byte array) =
 
   member __.GetTriggerNoteForChannel mdTrack =
     match notePerTriggerLookup.TryGetValue (TriggerChannel mdTrack) with
-    | true, note -> Some note
+    | true, note -> Some (UMX.tag_byte_7bits note)
     | _ -> None
 
   override __.Equals other =
@@ -782,10 +839,10 @@ type KeyMapStructure(bytes: byte array) =
           | _ -> invalidArg "yobj" "cannot compare values of different types"
 
 type GlobalSettings = {
-  mutable OriginalPosition : byte
+  mutable OriginalPosition : byte_7bits
   DrumRoutingTable         : Output array
   KeymapStructure          : KeyMapStructure
-  mutable MidiBaseChannel  : byte
+  mutable MidiBaseChannel  : byte_7bits
   // ...
   // Mechanical settings
   // 24 * Tempo (bit 7...13)
@@ -809,19 +866,21 @@ type GlobalSettings = {
 with 
   static member ToSysex globals =
     [||]
-  static member FromSysex (bytes: byte array) =
+  static member FromSysex (bytes: sysex_data) =
     let originalPosition = bytes.[0x09]
-    let drumRoutingTable = bytes |> getSlice 0x0a 16 |> Array.map Output.FromByte
+    let drumRoutingTable = bytes |> SysexBufferEdit.getDataSlice 0x0a 16 |> Array.map Output.FromByte
     let keymapStructure = 
       bytes
-      |> getSlice 0x1a 147
+      |> SysexBufferEdit.getSlice 0x1a 147
+      |> unbox
       |> dataToByte
+      |> unbox
       |> KeyMapStructure
     let midiBaseChannel = bytes.[0xad]
-    { OriginalPosition = originalPosition
+    { OriginalPosition = UMX.to_byte_7bits originalPosition
       DrumRoutingTable = drumRoutingTable
       KeymapStructure = keymapStructure
-      MidiBaseChannel = midiBaseChannel
+      MidiBaseChannel = UMX.to_byte_7bits midiBaseChannel
     }
      
 (*
@@ -850,7 +909,7 @@ type MachineDrumSysexResponses =
 | KitResponse of MDKit
 | PatternResponse of MDPattern
 | SongResponse of MDSong
-| StatusResponse of MachineDrumStatusType * byte
+| StatusResponse of MachineDrumStatusType * byte_7bits
 //| UnknownSysexResponse of byte array
 with
   member x.MessageId =
@@ -860,13 +919,13 @@ with
     | PatternResponse _ -> 0x67uy
     | SongResponse _ -> 0x69uy
     | StatusResponse _ -> 0x72uy
-  static member BuildResponse (sysex: byte array) =
-    match sysex.[6] with
+  static member BuildResponse (sysex: sysex_data) =
+    match UMX.untag_sysex sysex.[6] with
     | 0x50uy -> Some (GlobalSettingsResponse (GlobalSettings.FromSysex sysex)             )
-    | 0x52uy -> Some (KitResponse (MDKit sysex)                                           )
+    | 0x52uy -> Some (KitResponse (MDKit.fromSysex sysex)                                 )
     | 0x67uy -> Some (PatternResponse (MDPattern sysex)                                   )
     | 0x69uy -> Some (SongResponse (MDSong sysex)                                         )
-    | 0x72uy -> Some (StatusResponse (MachineDrumStatusType.FromByte sysex.[7], sysex.[8]))
+    | 0x72uy -> Some (StatusResponse (MachineDrumStatusType.FromByte (UMX.untag_sysex sysex.[7]), UMX.to_byte_7bits sysex.[8]))
     | _ ->
         // failwithf "h:%x response not understood" sysex.[6]
         None 
@@ -879,22 +938,24 @@ type AssignMachineMode =
 | InitSynthesisAndEffectsAndRouting
 with
   member x.Value =
-    match x with
-    | InitSynthesis                     -> 0x0uy
-    | InitSynthesisAndEffects           -> 0x1uy
-    | InitSynthesisAndEffectsAndRouting -> 0x2uy
-
+    UMX.tag_byte_7bits (
+      match x with
+      | InitSynthesis                     -> 0x0uy
+      | InitSynthesisAndEffects           -> 0x1uy
+      | InitSynthesisAndEffectsAndRouting -> 0x2uy
+    )
+open Midi
 type MachineDrumSysexRequests =
-| DumpGlobalSettings of globalSettingIndex: byte
-| DumpKit of kit: byte
-| DumpPattern of pattern: byte
-| DumpSong of song: byte
-| QueryStatus of statusType: MachineDrumStatusType
-| LoadKit of kit: byte
-| SaveKit of kit: byte
-| SetCurrentKitName of string
-| AssignMachine of track: Track * machine: MDMachineType * mode: AssignMachineMode
-| SetReverbParameter of ReverbParameter * value: byte
+| DumpGlobalSettings of globalSettingIndex: byte_7bits
+| DumpKit            of kit: byte_7bits
+| DumpPattern        of pattern: byte_7bits
+| DumpSong           of song: byte_7bits
+| QueryStatus        of statusType: MachineDrumStatusType
+| LoadKit            of kit: byte_7bits
+| SaveKit            of kit: byte_7bits
+| SetCurrentKitName  of string
+| AssignMachine      of track: Track * machine: MDMachineType * mode: AssignMachineMode
+| SetReverbParameter of ReverbParameter * value: byte_7bits
 with
   member x.MessageId = 
     match x with
@@ -936,14 +997,16 @@ with
         |> Seq.truncate 16 
         |> Seq.toArray
         |> Array.map byte
+        |> Array.map UMX.tag_byte_7bits
       | AssignMachine (track, machine, mode) ->
         let machineByte, uwByte =
           match machine with
-          | MD m -> byte m, 0uy
-          | MDUW m -> byte m, 1uy
+          | MD m   -> UMX.tag_byte_7bits (byte m), UMX.tag_byte_7bits 0uy
+          | MDUW m -> UMX.tag_byte_7bits (byte m), UMX.tag_byte_7bits 1uy
         [|Track.trackValue track;machineByte;uwByte;mode.Value|]
       | SetReverbParameter(parameter, value) -> [|ReverbParameter.ToByte parameter;value|]
-    Elektron.Platform.SysexHelper.makeMachineDrumSysexMessage (Array.concat ([|x.MessageId |> Array.singleton; data|]))
+    
+    SysexHelper.makeMachineDrumSysexMessage (Array.concat ([|x.MessageId |> UMX.to_byte_7bits |> Array.singleton; data|]))
 
 type LFOEvent =
 | AssignTrack       of Track
@@ -953,20 +1016,20 @@ type LFOEvent =
 | AssignType        of LFOType
 
 type MachineDrumEvent =
-| TrackLevel        of Track * value: byte
-| TrackParameter    of Track * MDTrackParameter * value: byte
-| TrackTrigger      of Track * velocity: byte
+| TrackLevel        of Track * value: byte_7bits
+| TrackParameter    of Track * MDTrackParameter * value: byte_7bits
+| TrackTrigger      of Track * velocity: byte_7bits
 | TrackRelease      of Track
 | PatternChanged    of PatternLocator
 | LFOSetting        of Track * LFOEvent
-| DelaySetting      of DelayParameter * value: byte
-| ReverbSetting     of ReverbParameter * value: byte
-| EqualizerSetting  of EqualizerParameter * value: byte
-| CompressorSetting of CompressorParameter * value: byte
+| DelaySetting      of DelayParameter * value: byte_7bits
+| ReverbSetting     of ReverbParameter * value: byte_7bits
+| EqualizerSetting  of EqualizerParameter * value: byte_7bits
+| CompressorSetting of CompressorParameter * value: byte_7bits
 | Unknown           of MidiMessage
 | MachineDrumSysex  of MachineDrumSysexResponses
-| Sysex             of byte array
-| KitChanged        of byte
+| Sysex             of sysex_data
+| KitChanged        of byte_7bits
 with
     member x.Track =
         match x with
@@ -979,20 +1042,11 @@ with
         | _ -> None
 
 
-module Sysex =
-  let mdHeader = [|
-      0xf0uy
-      0x00uy
-      0x20uy
-      0x3cuy
-      0x02uy
-      0x00uy
-    |]
 
 [<RequireQualifiedAccess>]
 type MidiOutputData =
 | Message of MidiMessage
-| Sysex of bytes: byte array
+| Sysex of bytes: sysex_data
 
 type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutput<'timestamp>, getSysexNowTimestamp) =
   let helpGetMDSysex maxMessage (timeout: TimeSpan) (request: MachineDrumSysexRequests) inPort : Async<MachineDrumSysexResponses option> =
@@ -1006,7 +1060,7 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
           timeout 
           (fun sysex -> 
               sysex.[0..5] = Sysex.mdHeader 
-              && sysex.[6] = request.ResponseMessageId
+              && sysex.[6] = UMX.tag_sysex_data request.ResponseMessageId
           ) 
           (request.BuildResponse >> Option.get) 
           inPort
@@ -1052,24 +1106,28 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
           match note with
           | None      -> None
           | Some note -> 
+              let note = note
+              let velocity = velocity
               if isOn then
                   Some (MidiOutputData.Message (MidiMessage.NoteOn channel note velocity))
               else
                   Some (MidiOutputData.Message (MidiMessage.NoteOff channel note velocity))
       let makeCC track parameter value =
-        let cc = MDTrackParameter.GetCCForTrack parameter track
-        let channel = Track.midiBaseChannelOffset track + channel
+        let cc      = UMX.untag_byte_7bits <| MDTrackParameter.GetCCForTrack parameter track
+        let channel = UMX.untag_byte_7bits <| Track.midiBaseChannelOffset track + channel
+        let value   = UMX.untag_byte_7bits <| value
         MidiMessage.CC channel cc value
         |> MidiOutputData.Message
       let makeProgramChange program =
+        let program = UMX.untag_byte_7bits program
         MidiMessage.ProgramChange channel program
         |> MidiOutputData.Message
         
       let none = Array.empty
       let some = Array.singleton
       match mdEvent with
-      | TrackTrigger(track, velocity)            -> makeNote note velocity true  |> Option.get |> some
-      | TrackRelease(track)                      -> makeNote note 0uy      false |> Option.get |> some
+      | TrackTrigger(track, velocity)            -> makeNote note velocity true |> Option.get |> some
+      | TrackRelease(track)                      -> makeNote note (UMX.tag_byte_7bits 0uy) false |> Option.get |> some
       | TrackLevel(track, level)                 -> none
       | TrackParameter(track, parameter, value)  -> makeCC track parameter value |> some
       | PatternChanged pattern                   -> none
@@ -1130,7 +1188,7 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
 
    member x.ChangeTrackParameter globals track parameter value =
     let cc = MDTrackParameter.GetCCForTrack parameter track    
-    MidiMessage.CC (globals.MidiBaseChannel) cc value
+    MidiMessage.CC (UMX.untag_byte_7bits globals.MidiBaseChannel) cc value
     |> outPort.WriteMessage (getSysexNowTimestamp())
 (*  
   member x.DumpKit kit =
@@ -1143,16 +1201,19 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
 
 
 module MachineDrumEventParser =
-  let inline isMachineDrumChannel midiBaseChannel channel = channel >= midiBaseChannel && channel < midiBaseChannel + 4uy
+  let inline isMachineDrumChannel (midiBaseChannel: byte_7bits) channel = channel >= midiBaseChannel && channel < midiBaseChannel + (UMX.tag_byte_7bits 4uy)
   let inline isMachineDrumControlChange midiBaseChannel (message: MidiMessage) = 
     message.MessageType = MidiMessageType.ControllerChange 
     && isMachineDrumChannel midiBaseChannel message.Channel.Value
     && (message.Data1 >= 16uy && message.Data1 <= 119uy)
   let trackOffset cc =
-    if   cc <= 39uy  then 0uy
-    elif cc <= 63uy  then 1uy
-    elif cc <= 95uy  then 2uy
-    else                  3uy
+    let cc = UMX.untag_byte_7bits cc
+    UMX.tag_byte_7bits(
+      if   cc <= 39uy  then 0uy
+      elif cc <= 63uy  then 1uy
+      elif cc <= 95uy  then 2uy
+      else                  3uy
+    )
 
 type TimestampedMessage<'t,'timestamp> = { 
   Timestamp : 'timestamp
@@ -1175,18 +1236,18 @@ type MachineDrumEventListener<'timestamp>(md: MachineDrum<'timestamp>, getNow) =
           PatternChanged (PatternLocator.FromByte message.Data1)
         elif MachineDrumEventParser.isMachineDrumControlChange midiBaseChannel message then
           let channel = message.Channel.Value
-          let cc = message.Data1
+          let cc = UMX.tag_byte_7bits message.Data1
           let trackOffset = MachineDrumEventParser.trackOffset cc
 
           let midiChannelOffset = channel - midiBaseChannel
           let track = Track.trackForValue ((midiChannelOffset * 4uy) + trackOffset)
           let parameter = MDTrackParameter.GetParameterForCC cc
-          TrackParameter (track, parameter, message.Data2)
+          TrackParameter (track, parameter, UMX.tag_byte_7bits message.Data2)
         elif message.MessageType = MidiMessageType.ControllerChange && message.Data1 >= 8uy && message.Data1 <= 0xbuy then
           let midiChannelOffset = message.Channel.Value - midiBaseChannel
       
           let track =
-            match message.Data1, midiChannelOffset with
+            match message.Data1, UMX.untag_byte_7bits midiChannelOffset with
             | 0x08uy, 0uy -> Some Track.BD
             | 0x09uy, 0uy -> Some Track.SD
             | 0x0auy, 0uy -> Some Track.HT
@@ -1206,7 +1267,7 @@ type MachineDrumEventListener<'timestamp>(md: MachineDrum<'timestamp>, getNow) =
             | _ -> None
 
           match track with
-          | Some track -> TrackLevel(track, message.Data2)
+          | Some track -> TrackLevel(track, UMX.tag_byte_7bits message.Data2)
           | None -> Unknown message
 
         elif message.MessageType = MidiMessageType.NoteOn && message.Channel.Value = midiBaseChannel then
@@ -1216,25 +1277,26 @@ type MachineDrumEventListener<'timestamp>(md: MachineDrum<'timestamp>, getNow) =
           | NoteTriggerType.NoteTriggerType(_, TriggerChannel track) ->
             match message.Data2 with
             | 0uy      -> TrackRelease track
-            | velocity -> TrackTrigger(track, velocity)
+            | velocity -> TrackTrigger(track, UMX.tag_byte_7bits velocity)
           | _ -> Unknown message
         else
           Unknown message
 
-  let onSysexMessage (sysex: byte array) =
-    match sysex with
+  let onSysexMessage (sysex: sysex_data) =
+    match UMX.untag_sysex sysex with
     | [|0xf0uy; 0x00uy; 0x20uy; 0x3cuy; 0x02uy; 0x00uy; 0x5duy; paramIndex; paramValue; 0xf7uy|] ->
-      DelaySetting(DelayParameter.FromByte paramIndex, paramValue)
+      DelaySetting(DelayParameter.FromByte paramIndex, UMX.tag_byte_7bits paramValue)
     | [|0xf0uy; 0x00uy; 0x20uy; 0x3cuy; 0x02uy; 0x00uy; 0x5euy; paramIndex; paramValue; 0xf7uy|] ->
-      ReverbSetting(ReverbParameter.FromByte paramIndex, paramValue)
+      ReverbSetting(ReverbParameter.FromByte paramIndex, UMX.tag_byte_7bits paramValue)
     | [|0xf0uy; 0x00uy; 0x20uy; 0x3cuy; 0x02uy; 0x00uy; 0x5fuy; paramIndex; paramValue; 0xf7uy|] ->
-      EqualizerSetting(EqualizerParameter.FromByte paramIndex, paramValue)
+      EqualizerSetting(EqualizerParameter.FromByte paramIndex, UMX.tag_byte_7bits paramValue)
     | [|0xf0uy; 0x00uy; 0x20uy; 0x3cuy; 0x02uy; 0x00uy; 0x60uy; paramIndex; paramValue; 0xf7uy|] ->
-      CompressorSetting(CompressorParameter.FromByte paramIndex, paramValue)
+      CompressorSetting(CompressorParameter.FromByte paramIndex, UMX.tag_byte_7bits paramValue)
     | [|0xf0uy; 0x00uy; 0x20uy; 0x3cuy; 0x02uy; 0x00uy; 0x62uy; paramIndex; paramValue; 0xf7uy|] ->
       let lfoIndex = (paramIndex &&& 0b01111000uy) >>> 3
-      let track = Track.trackForValue lfoIndex
+      let track = Track.trackForValue (UMX.tag_byte_7bits lfoIndex)
       let lfoSettingIndex = paramIndex &&& 0b00000111uy
+      let paramValue = UMX.tag_byte_7bits paramValue
       match lfoSettingIndex with
       | 0x0uy -> LFOSetting(track, AssignTrack       (Track.trackForValue paramValue))
       | 0x1uy -> LFOSetting(track, AssignDestination (MDTrackParameter.fromCCOffset paramValue))
@@ -1267,343 +1329,3 @@ type MachineDrumEventListener<'timestamp>(md: MachineDrum<'timestamp>, getNow) =
       channelMessageListener.Dispose()
   
   [<CLIEvent>] member x.Event = event.Publish
-
-let mdDetection (getTimestamp) (inputs: IMidiInput<_> array) (outputs: IMidiOutput<_> array) onSysex withMachineDrum  =
-    let queryMessage = QueryStatus(GlobalSlot)
-    let onSysex =
-        match onSysex with 
-        | Some onSysex -> onSysex 
-        | _ -> 
-        (fun sysex -> 
-            match MachineDrumSysexResponses.BuildResponse sysex with
-            //| Some(MachineDrumSysexResponses.GlobalSettingsResponseglobals) -> true
-            | Some(MachineDrumSysexResponses.StatusResponse(_)) -> true
-            | _ -> false        
-        )
-
-    Midinette.Sysex.Sysex.deviceInquiry inputs outputs 
-      onSysex
-      (fun midiOut ->
-        midiOut.WriteSysex (getTimestamp()) (QueryStatus(GlobalSlot).Sysex)
-      )
-      (fun midiIn midiOut ->
-          let md = MachineDrum(midiIn, midiOut, getTimestamp)
-          withMachineDrum md
-          { new System.IDisposable with member x.Dispose () = () }
-      )
-    
-
-
-
-let effectsParameters =
-  [|
-    ("AMD", "controls the the modulation depth")
-    ("AMF", "controls the modulation frequency")
-    ("EQF", "controls which center frequency that will be affected by the EQ gain")
-    ("EQG", "controls the EQ gain. If set to a negative value, the volume of the frequency centered around the EQF parameter will be reduced")
-    ("FLTF", "controls the base filter cutoff frequency")
-    ("FLTW", "controls the filter gap width, that is the distance between the highpass and lowpass cutoff frequencies")
-    ("FLTQ", "controls the filter quality Q parameter")
-    ("SRR", "controls the amount of sample rate reduction")
-  |]
-
-let routingParameters =
-  [|
-    ("DIST", "parameter controls the signal overload distortion")
-    ("VOL", "controls the volume of the track")
-    ("PAN", "positions the sound in the stereo field")
-    ("DEL", "controls the amount of signal that will be sent to the RHYTHM ECHO delay")
-    ("REV", "controls how much signal will be sent to the Machinedrum GATE BOX reverb")
-    ("LFOS", "controls the speed of the LFO")
-    ("LFOD", "controls the modulation depth of the LFO")
-    ("LFOM", "controls the mix between the two selectable LFO waveforms")
-  |]
-type SynthesisParameterName =
-| Pitch
-| Decay
-| Ramp
-| RampDecay
-| Start
-| Noise
-| Harmonics
-| Clip
-| Hold
-| Tick
-| Dirt
-| Distortion
-| Bump
-| BumpEnveloppe
-| Snap
-| Tone
-| Tune
-| Damp
-| DistortionType
-| Clappy
-| Hard
-| Richness
-| Rate
-| Room
-| RoomSize
-| RoomTuning
-| Enhancement
-| Gap
-| HighpassFilter
-| LowpassFilter
-| Metal
-| Top
-| TopTune
-| Size
-| Peak
-| Attack
-| Sustain
-| Reverse
-| Rattle
-| RattleType
-| Dual
-| Clic
-| FMDepth
-| FMFrequency
-| FMDecay
-| FMFeedback
-| NoiseDecay
-| Snare
-| SnarePitch
-| SnareDecay
-| SnareModulationDepth
-| Feedback
-| Tremolo
-| TremoloFrequency
-| SnapLength
-| SampleStart
-| RetrigCount
-| RetrigTime
-| PitchBend
-| HighPassFilterQ
-| Ring
-| Bell
-| Stop
-| Real
-| BongoOrCongo
-| Slew
-| Hammer
-| Tension
-| Position
-| GrainsCount
-| GrainDecay
-| Closeness
-| AG
-| AU
-| BR
-| Close
-| Grab
-| Up
-| Down
-| DownValue
-| Volume
-| GateSensitivity
-| Level
-| FilterAttack
-| FilterHold
-| FilterDecay
-| FilterModulationDepth
-| FilterFrequency
-| FilterQ
-| Amplitude
-| Note
-| Note2
-| Note3
-| Length
-| Velocity
-| ModulationWheel
-| AfterTouch
-| BitRateReduction
-| End
-
-type SynthesisParameterDescription = {
-  Parameter: SynthesisParameterName
-  Code: string
-  Description: string
-}
-
-let synthesisParameters =
-  let inline mkDesc p c d = {Parameter = p; Code = c; Description = d}
-  let inline mkMdDesc mdMachine parameters = MD mdMachine, parameters
-  let inline mkMdUwDesc mdMachine parameters = MDUW mdMachine, parameters
-
-  let romParams = [|
-    mkDesc Pitch            "PTCH" "Adjusts the pitch two octaves up or down. For the first octave up or down, every third parameter step adjusts the pitch one semi-note"
-    mkDesc Decay            "DEC"  "The Decay time. If the sample is looped, a setting of 127 will make it loop infinitely"
-    mkDesc Hold             "HOLD" "Hold the amplitude envelope open for the specified time. A value of 127 keeps the envelope open for 1 bar (16 steps). A value of 1 will keep the envelope open for 1/8 of a step"
-    mkDesc BitRateReduction "BRR"  "Bit Rate Reduction. When set to 127 the sample will be of 2-bit quality"
-    mkDesc Start            "STRT" "Controls the start point of the sample. The parameter is exponential, giving a very fine control over the beginning of a sample"
-    mkDesc End              "END"  "Controls the end point of the sample. The sample will be reversed if it is set to a lower value than the STRT parameter"
-    mkDesc RetrigCount      "RTRG" "Sets the number of times a sample will retrig. If set to 127 the sample will retrig infinitely"
-    mkDesc RetrigTime       "RTIM" "Defines the time between two retrigs. The time is relative to the tempo. If the value is set to zero the RTRG parameter will not affect anything"
-  |]
-
-  [|
-    mkMdDesc MDMachine.TRX_BD [|
-      mkDesc Pitch     "PTCH" "Controls the basic pitch of the drum"
-      mkDesc Decay     "DEC"  "Controls the decay time"
-      mkDesc Ramp      "RAMP" "Ramps the pitch"
-      mkDesc RampDecay "RDEC" "Speed of pitch ramp"
-      mkDesc Start     "STRT" "Makes the start harder"
-      mkDesc Noise     "NOIS" "Adds noise to the start of the sound"
-      mkDesc Harmonics "HARM" "Adds extra harmonics"
-      mkDesc Clip      "CLIP" "A special type of distortion"
-    |]
-    mkMdDesc MDMachine.TRX_B2 [|
-      mkDesc Pitch      "PTCH" "Controls the basic pitch of the drum"
-      mkDesc Decay      "DEC"  "Controls the decay time"
-      mkDesc Ramp       "RAMP" "Ramps the pitch"
-      mkDesc Hold       "HOLD" "Controls the initial hold time for the volume"
-      mkDesc Tick       "TICK" "Adds a tick to make the start harder"
-      mkDesc Noise      "NOIS" "Adds noise to the start of the sound"
-      mkDesc Dirt       "DIRT" "Controls a bit reduction function for the bassdrum"
-      mkDesc Distortion "DIST" "A special type of distortion"
-    |]
-    mkMdDesc MDMachine.TRX_SD [|
-      mkDesc Pitch         "PTCH" "Controls the basic pitch of the drum"
-      mkDesc Decay         "DEC"  "Controls the decay time"
-      mkDesc Bump          "BUMP" "Adds a pitch shift at the start"
-      mkDesc BumpEnveloppe "BENV" "Controls the envelope of the bump"
-      mkDesc Snap          "SNAP" "Amount of snap"
-      mkDesc Tone          "TONE" "Changes tonal quality"
-      mkDesc Tune          "TUNE" "Detunes the drum"
-      mkDesc Clip          "CLIP" "A special type of distortion"
-    |]
-    mkMdDesc MDMachine.TRX_XT [|
-      mkDesc Pitch          "PTCH" "Controls the basic pitch of the drum"
-      mkDesc Decay          "DEC"  "Controls the decay time"
-      mkDesc Ramp           "RAMP" "Ramps the pitch"
-      mkDesc RampDecay      "RDEC" "Speed of pitch ramp"
-      mkDesc Damp           "DAMP" "Dampens the decay"
-      mkDesc Distortion     "DIST" "Distortion"
-      mkDesc DistortionType "DTYP" "Hardness of the distortion"
-    |]
-    mkMdDesc MDMachine.TRX_CP [|
-      mkDesc Clappy     "CLPY" "Density of the clap"
-      mkDesc Tone       "TONE" "Changes tonal quality"
-      mkDesc Hard       "HARD" "Harder claps"
-      mkDesc Richness   "RICH" "Enhances the richness of the sound"
-      mkDesc Rate       "RATE" "Rate of the individual claps"
-      mkDesc Room       "ROOM" "Adds a room sound"
-      mkDesc RoomSize   "RSIZ" "Changes the size of the room"
-      mkDesc RoomTuning "RTUN" "Changes the tonal quality of the room"
-    |]
-    mkMdDesc MDMachine.TRX_RS [|
-      mkDesc Pitch      "PTCH" "Controls the basic pitch"
-      mkDesc Decay      "DEC"  "Controls the decay time"
-      mkDesc Distortion "DIST" "Distortion"
-    |]
-    mkMdDesc MDMachine.TRX_CB [|
-      mkDesc Pitch       "PTCH" "Controls the basic pitch"
-      mkDesc Decay       "DEC"  "Controls the decay time"
-      mkDesc Enhancement "ENH"  "Enhances the body of the sound"
-      mkDesc Damp        "DAMP" "Dampens the decay part"
-      mkDesc Tone        "TONE" "Changes tonal quality"
-      mkDesc Bump        "BUMP" "Adds a pitchshift at the start of the sound"
-    |]
-    mkMdDesc MDMachine.TRX_CH [|
-      mkDesc Gap            "GAP"  "Changes the hi-hat gap"
-      mkDesc Decay          "DEC"  "Controls the decay time"
-      mkDesc HighpassFilter "HPF"  "High pass filters the sound"
-      mkDesc LowpassFilter  "LPF"  "Low pass filters the sound"
-      mkDesc Metal          "MTAL" "Adds extra metal character to the sound"
-    |]
-    mkMdDesc MDMachine.TRX_OH [|
-      mkDesc Gap            "GAP"  "Changes the hi-hat gap"
-      mkDesc Decay          "DEC"  "Controls the decay time"
-      mkDesc HighpassFilter "HPF"  "High pass filters the sound"
-      mkDesc LowpassFilter  "LPF"  "Low pass filters the sound"
-      mkDesc Metal          "MTAL" "Adds extra metal character to the sound"
-    |]
-    mkMdDesc MDMachine.TRX_CY [|
-      mkDesc Richness "RICH" "Adds extra richness to the sound"
-      mkDesc Decay    "DEC"  "Controls the decay time"
-      mkDesc Top      "TOP"  "Amount of high frequencies harmonics"
-      mkDesc TopTune  "TTUN" "Tunes the top"
-      mkDesc Size     "SIZE" "Changes the size of the cymbal"
-      mkDesc Peak     "PEAK" "Gives the sound more edge"
-    |]
-    mkMdDesc MDMachine.TRX_MA [|
-      mkDesc Attack     "ATT"  "Length of the attack"
-      mkDesc Sustain    "SUS"  "Length of the sustain"
-      mkDesc Reverse    "REV"  "Reverses movement of the maracas"
-      mkDesc Damp       "DAMP" "Dampens the sound to make it more sparse"
-      mkDesc Rattle     "RATL" "Adds extra rattle to the sound"
-      mkDesc RattleType "RTYP" "Type of rattle"
-      mkDesc Tone       "TONE" "Changes tonal quality"
-      mkDesc Hard       "HARD" "Gives the sound a harder character"
-    |]
-    mkMdDesc MDMachine.TRX_CL [|
-      mkDesc Pitch       "PTCH" "Controls the basic pitch"
-      mkDesc Decay       "DEC"  "Controls the decay time"
-      mkDesc Dual        "DUAL" "Introduces a dual attack"
-      mkDesc Enhancement "ENH"  "Enhances the tone"
-      mkDesc Tune        "TUNE" "Detunes the sound"
-      mkDesc Clic        "CLIC" "Adds a click at the start"
-    |]
-    mkMdDesc MDMachine.TRX_XC [|
-      mkDesc Pitch          "PTCH" "Controls the basic pitch of the drum"
-      mkDesc Decay          "DEC"  "Controls the decay time"
-      mkDesc Ramp           "RAMP" "Ramps the pitch"
-      mkDesc RampDecay      "RDEC" "Speed of the pitch ramp"
-      mkDesc Damp           "DAMP" "Dampens the decay part of the sound"
-      mkDesc Distortion     "DIST" "Distortion"
-      mkDesc DistortionType "DTYP" "Hardness of the distortion"
-    |]
-    mkMdUwDesc MDUWMachine.ROM_01 romParams
-    mkMdUwDesc MDUWMachine.ROM_02 romParams
-    mkMdUwDesc MDUWMachine.ROM_03 romParams
-    mkMdUwDesc MDUWMachine.ROM_04 romParams
-    mkMdUwDesc MDUWMachine.ROM_05 romParams
-    mkMdUwDesc MDUWMachine.ROM_06 romParams
-    mkMdUwDesc MDUWMachine.ROM_07 romParams
-    mkMdUwDesc MDUWMachine.ROM_08 romParams
-    mkMdUwDesc MDUWMachine.ROM_09 romParams
-    mkMdUwDesc MDUWMachine.ROM_10 romParams
-    mkMdUwDesc MDUWMachine.ROM_11 romParams
-    mkMdUwDesc MDUWMachine.ROM_12 romParams
-    mkMdUwDesc MDUWMachine.ROM_13 romParams
-    mkMdUwDesc MDUWMachine.ROM_14 romParams
-    mkMdUwDesc MDUWMachine.ROM_15 romParams
-    mkMdUwDesc MDUWMachine.ROM_16 romParams
-    mkMdUwDesc MDUWMachine.ROM_17 romParams
-    mkMdUwDesc MDUWMachine.ROM_18 romParams
-    mkMdUwDesc MDUWMachine.ROM_19 romParams
-    mkMdUwDesc MDUWMachine.ROM_20 romParams
-    mkMdUwDesc MDUWMachine.ROM_21 romParams
-    mkMdUwDesc MDUWMachine.ROM_22 romParams
-    mkMdUwDesc MDUWMachine.ROM_23 romParams
-    mkMdUwDesc MDUWMachine.ROM_24 romParams
-    mkMdUwDesc MDUWMachine.ROM_25 romParams
-    mkMdUwDesc MDUWMachine.ROM_26 romParams
-    mkMdUwDesc MDUWMachine.ROM_27 romParams
-    mkMdUwDesc MDUWMachine.ROM_28 romParams
-    mkMdUwDesc MDUWMachine.ROM_29 romParams
-    mkMdUwDesc MDUWMachine.ROM_30 romParams
-    mkMdUwDesc MDUWMachine.ROM_31 romParams
-    mkMdUwDesc MDUWMachine.ROM_32 romParams
-    mkMdUwDesc MDUWMachine.ROM_33 romParams
-    mkMdUwDesc MDUWMachine.ROM_34 romParams
-    mkMdUwDesc MDUWMachine.ROM_35 romParams
-    mkMdUwDesc MDUWMachine.ROM_36 romParams
-    mkMdUwDesc MDUWMachine.ROM_37 romParams
-    mkMdUwDesc MDUWMachine.ROM_38 romParams
-    mkMdUwDesc MDUWMachine.ROM_39 romParams
-    mkMdUwDesc MDUWMachine.ROM_40 romParams
-    mkMdUwDesc MDUWMachine.ROM_41 romParams
-    mkMdUwDesc MDUWMachine.ROM_42 romParams
-    mkMdUwDesc MDUWMachine.ROM_43 romParams
-    mkMdUwDesc MDUWMachine.ROM_44 romParams
-    mkMdUwDesc MDUWMachine.ROM_45 romParams
-    mkMdUwDesc MDUWMachine.ROM_46 romParams
-    mkMdUwDesc MDUWMachine.ROM_47 romParams
-    mkMdUwDesc MDUWMachine.ROM_48 romParams
-    mkMdUwDesc MDUWMachine.ROM_48 romParams
-    mkMdUwDesc MDUWMachine.RAM_P1 romParams
-    mkMdUwDesc MDUWMachine.RAM_P2 romParams
-    mkMdUwDesc MDUWMachine.RAM_P3 romParams
-    mkMdUwDesc MDUWMachine.RAM_P4 romParams
-  |] |> dict
