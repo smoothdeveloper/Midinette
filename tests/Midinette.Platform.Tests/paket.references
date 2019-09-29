@@ -1,0 +1,5 @@
+group Test
+  Expecto.FsCheck
+  FsCheck.NUnit
+  Logary.Adapters.Facade
+  

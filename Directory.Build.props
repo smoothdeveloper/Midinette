@@ -1,0 +1,9 @@
+<Project>
+    <PropertyGroup>
+        <Deterministic>true</Deterministic>
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+        <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+</Project>

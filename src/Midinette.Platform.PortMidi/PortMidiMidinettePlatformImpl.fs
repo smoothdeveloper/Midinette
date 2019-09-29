@@ -7,7 +7,8 @@ module Impl =
     let toMidiEvent (e :PortMidi.MidiEvent) = MidiEvent<int>(Midi.MidiMessage.FromWord e.Message.Word, e.Timestamp)
     //let toMidiMessage   (m: PortMidi.MidiMessage) = Midi.MidiMessage.FromWord m.Word
     let fromMidiMessage (m: Midi.MidiMessage)     = PortMidi.MidiMessage.FromWord m.Word
-    
+    let toTaggedSysexEvent (h:IEvent<Handler<byte array>, byte array>) : IEvent<Handler<sysex_data>, sysex_data> = unbox h
+        
 open Impl
 
 type PortMidiDeviceInfo = { deviceInfo: PortMidi.MidiDeviceInfo }
@@ -23,7 +24,7 @@ with
         [<CLIEvent>] member x.Error = x.inPort.Error
         [<CLIEvent>] member x.ChannelMessageReceived  = x.inPort.ChannelMessageReceived  |> Event.map toMidiEvent            
         [<CLIEvent>] member x.SystemMessageReceived   = x.inPort.SystemMessageReceived   |> Event.map toMidiEvent        
-        [<CLIEvent>] member x.SysexReceived           = x.inPort.SysexReceived
+        [<CLIEvent>] member x.SysexReceived           = x.inPort.SysexReceived |> Impl.toTaggedSysexEvent
         [<CLIEvent>] member x.RealtimeMessageReceived = x.inPort.RealtimeMessageReceived |> Event.map toMidiEvent          
         member x.Open bufferSize = x.inPort.Open bufferSize
         member x.Close () = x.inPort.Close ()
@@ -37,7 +38,7 @@ with
         member x.Close () = x.outPort.Close ()
         member x.WriteMessage timestamp message = x.outPort.WriteMessage timestamp (fromMidiMessage message)
         member x.WriteMessages timestamp messages = x.outPort.WriteMessages timestamp (messages |> Array.map fromMidiMessage)
-        member x.WriteSysex timestamp sysex = x.outPort.WriteSysex timestamp sysex
+        member x.WriteSysex timestamp sysex = x.outPort.WriteSysex timestamp (UMX.untag_sysex sysex)
         member x.DeviceInfo = { deviceInfo = x.outPort.DeviceInfo } :> _
                                   
  

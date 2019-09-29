@@ -3,7 +3,6 @@ source ../portmidisharp/build/Debug/AnyCPU
 source ../fsnative/build/Debug/AnyCPU
 source https://nuget.org/api/v2
 storage: none
-redirects: force
 clitool dotnet-fable
 github fsprojects/FSharp.UMX src/FSharp.UMX.fs
 nuget Fable.Core
@@ -15,7 +14,17 @@ nuget fsnative
 nuget PortMidiSharp
 nuget RtMidi.Core = 1.0.59-alpha-3
 
+
 group Build
   source https://nuget.org/api/v2
   framework >= net461
   #nuget FAKE
+  
+group Test
+    source https://nuget.org/api/v2
+    storage: none
+
+    nuget Expecto.FsCheck
+    nuget FsCheck.NUnit
+    nuget Logary.Adapters.Facade prerelease
+    

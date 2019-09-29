@@ -371,7 +371,18 @@ with
     | 6uy -> Mono
     | 7uy -> Level
     | v -> failwithf "unknown DelayParameter: %i" v
-
+  static member all =
+    [|
+       Time 
+       ModulationDepth
+       ModulationFrequency
+       Feedback
+       FilterFrequency
+       FilterWidth
+       Mono
+       Level
+    |]
+    
 [<RequireQualifiedAccess>]
 type ReverbParameter =
 | DelayLevel
@@ -383,7 +394,7 @@ type ReverbParameter =
 | GateTime
 | Level
 with
-  static member All =
+  static member all =
     [|
       DelayLevel
       PreDelay
@@ -416,6 +427,7 @@ with
     | GateTime   -> 6uy
     | Level      -> 7uy
     >> UMX.tag_byte_7bits
+    
 [<RequireQualifiedAccess>]
 type EqualizerParameter =
 | LowShelfFrequency
@@ -461,7 +473,18 @@ with
     | 6uy -> OutputGain
     | 7uy -> Mix
     | v -> failwithf "unknown CompressorParameter: %i" v
-
+  static member all =
+    [|
+      Attack
+      Release
+      Threshold
+      Ratio
+      Knee
+      SideChainHighPass
+      OutputGain
+      Mix
+    |]
+    
 type EqualizerSettings(bytes: sysex_data) =
   let baseAddress = 0x497
   let getAt = SysexBufferEdit.getAt bytes baseAddress
@@ -951,6 +974,7 @@ type MachineDrumSysexRequests =
 | DumpPattern        of pattern: byte_7bits
 | DumpSong           of song: byte_7bits
 | QueryStatus        of statusType: MachineDrumStatusType
+| LoadPattern        of pattern: byte_7bits
 | LoadKit            of kit: byte_7bits
 | SaveKit            of kit: byte_7bits
 | SetCurrentKitName  of string
@@ -965,6 +989,7 @@ with
     | DumpPattern _        -> 0x68uy
     | DumpSong _           -> 0x6auy
     | SetCurrentKitName _  -> 0x56uy
+    | LoadPattern _        -> 0x57uy
     | LoadKit _            -> 0x58uy
     | SaveKit _            -> 0x59uy
     | QueryStatus _        -> 0x70uy
@@ -988,6 +1013,7 @@ with
       | DumpPattern pattern    -> pattern |> Array.singleton
       | DumpSong song          -> song |> Array.singleton
       | QueryStatus status     -> status.Id |> Array.singleton
+      | LoadPattern pattern    -> pattern |> Array.singleton
       | LoadKit kit            -> kit |> Array.singleton
       | SaveKit kit            -> kit |> Array.singleton
       | SetCurrentKitName name -> 

@@ -3,10 +3,6 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
     <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
-    <OtherFlags>$(OtherFlags)</OtherFlags>
-    <WarningLevel>4</WarningLevel>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <WarningsAsErrors />
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Midinette\Midinette.fsproj" />

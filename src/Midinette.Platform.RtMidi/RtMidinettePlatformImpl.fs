@@ -70,8 +70,8 @@ type RtMidiMidinettePlatformImpl() as this =
     let rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
-    let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
-    let iplatform = this :> IMidiPlatform<int64>
+    //let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
+    let iplatform =this :> IMidiPlatform<int64>
     member x.Trigger = platformEvents
     //member x.Platform = x :> IMidiPlatformEvents<_>
     
