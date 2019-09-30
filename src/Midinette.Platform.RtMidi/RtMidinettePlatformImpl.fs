@@ -107,9 +107,14 @@ type RtMidiMidinettePlatformImpl() as this =
                     let error = new Event<_>()
                     let channelMessage = new Event<_>()
                     let sysex = new Event<_>()
+                    let invalidSysex = new Event<_>()
                     let systemMessage = new Event<_>()
                     let realtimeMessage = new Event<_>()
-                    port.InputDevice.Message.Add(fun bytes ->
+                    
+                    let sysexParts = ResizeArray()
+                    
+                    let rec onBytes (bytes: byte array) =
+                    
                       let status : MidiMessageType = LanguagePrimitives.EnumOfValue (bytes.[0])
                       let inline toMidiEvent (bytes: byte array) (watch: Stopwatch) =
                         let timestamp = watch.ElapsedTicks
@@ -120,21 +125,52 @@ type RtMidiMidinettePlatformImpl() as this =
                         let event = toMidiEvent bytes watch 
                         event1.Trigger event
                         platformNoticer ({info = device},event)
+                      let inline pushSysexBytes endSysexIndex =
+                        let sysexBytes = 
+                          [|
+                              yield! sysexParts.ToArray()
+                              yield bytes.[0 .. endSysexIndex] 
+                          |] |> Array.concat
+
+                        sysex.Trigger (UMX.tag_sysex_data sysexBytes)
+                        platformEvents.NoticeSysex({info = device }, sysexBytes)
+                        sysexParts.Clear()
+                        
+                        
+                      let inline getSysexEndIndex () = bytes |> Array.tryFindIndex (fun i -> i = byte MidiMessageType.SysExEnd)
                       if MidiMessageTypeIdentifaction.isChannelMessage status then
                         triggerMessageEvent channelMessage platformEvents.NoticeChannelMessage
                       elif MidiMessageTypeIdentifaction.isRealtimeMessage status then
                         triggerMessageEvent realtimeMessage platformEvents.NoticeRealtimeMessage
                       elif MidiMessageTypeIdentifaction.isSystemMessage status then
-                        if MidiMessageTypeIdentifaction.isSysexBeginOrEnd status then
-                            sysex.Trigger (UMX.tag_sysex_data bytes)
-                            platformEvents.NoticeSysex({info = device }, bytes)
+                        if status = MidiMessageType.SysExEnd then
+                            sysexParts.Add ([|bytes.[0]|])
+                            pushSysexBytes 0
+                        elif status = MidiMessageType.SysEx then
+                           if sysexParts.Count > 0 then
+                               invalidSysex.Trigger(sysexParts.ToArray() |> Array.concat)
+                               sysexParts.Clear()
+                           else
+                               match getSysexEndIndex () with
+                               | Some endSysexIndex ->
+                                    pushSysexBytes endSysexIndex
+                                    if bytes.Length > endSysexIndex then
+                                        onBytes bytes.[endSysexIndex..]
+                                | None ->
+                                    sysexParts.Add bytes
                         else
                             triggerMessageEvent systemMessage platformEvents.NoticeSystemMessage
+                      elif sysexParts.Count > 0 then
+                        match getSysexEndIndex() with
+                        | Some endIndex ->
+                            pushSysexBytes endIndex
+                        | None ->
+                            sysexParts.Add bytes
                       else
                         #if DEBUG
                         failwithf "unable to parse what I received received %A" bytes
                         #endif
-                    )
+                    port.InputDevice.Message.Add(onBytes)
                     let inEvents = {error = error; channelMessage = channelMessage; sysex = sysex; systemMessage = systemMessage; realtimeMessage = realtimeMessage }
                     Some ({ inPort = port; info = rtDevice; inEvents = inEvents } :> _)
                 | _ -> None
