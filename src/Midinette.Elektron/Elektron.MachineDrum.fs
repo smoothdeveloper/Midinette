@@ -10,6 +10,41 @@ open Midi
 open Midinette.Platform
 open Midinette.Sysex
 
+type NonZeroIndexedArraySegment<'t>(baseLogicalAddress: int, segment: ArraySegment<'t>) =
+  let checkAddress address =
+    if address < baseLogicalAddress then failwithf "can't query bellow base logical address"
+    let address = address - baseLogicalAddress
+    if address >= segment.Count then failwithf "can't query after the segment"
+    address
+  let checkAddressAndLength address length =
+    let address = checkAddress address
+    if length > segment.Count then failwithf "can't query length past segment"
+    address
+  member x.LogicalOffset = baseLogicalAddress
+  member x.Get address =
+   let address = checkAddress address
+   segment.Array.[segment.Offset + address]
+  member x.Length = segment.Count
+  member x.Set address value =
+    let address = checkAddress address
+    segment.Array.[segment.Offset + address] <- value
+
+  member x.Array = segment.Array.[segment.Offset .. (segment.Count - 1)]
+  member x.GetSlice address length =
+    let address = checkAddressAndLength address length
+    let slice = segment.Array.[segment.Offset + address .. (segment.Offset + address + length - 1)]
+    
+    assert (slice.Length = length)
+    slice
+    
+  member x.Blit address length data =
+    let address = checkAddressAndLength address length
+    Array.blit data 0 segment.Array address length
+  member x.Segment = segment
+  member x.SubSegment baseAddress length =
+    let address = checkAddressAndLength baseAddress length
+    NonZeroIndexedArraySegment(baseAddress, System.ArraySegment(segment.Array, address, length))
+
 (*
 [<RequireQualifiedAccess>]
 type LFOType =
@@ -29,6 +64,13 @@ with
     | Trig -> 1uy
     | Hold -> 2uy
 *)
+
+type MachineDrumSysexMessageId =
+  | Global  = 0x50uy
+  | Kit     = 0x52uy
+  | Pattern = 0x67uy
+  | Song    = 0x69uy
+  
 module Sysex =
   let mdHeader =
     [|
@@ -40,6 +82,52 @@ module Sysex =
       0x00uy
     |] 
     |> UMX.tag_sysex_data
+  
+  
+  
+  module Sizes =
+    let [<Literal>] kit = 0x4D1
+    let [<Literal>] patternShort = 0xacd
+    let [<Literal>] patternLong = 0x1522
+    
+  module Offsets =
+    let [<Literal>] messageId = 0x6 
+    module Kit =
+      let [<Literal>] kit             = 0x9
+      let [<Literal>] trackParameters = 0x1a
+      let [<Literal>] drumModels      = 0x1aa
+      let [<Literal>] reverb          = 0x487
+      let [<Literal>] delay           = 0x48f
+      let [<Literal>] equalizer       = 0x497
+      let [<Literal>] compressor      = 0x49f
+    module Pattern =
+      let [<Literal>] pattern         = 0x9
+    (*  let [<Literal>] trigPattern     = 0xa
+      let [<Literal>] lockPattern     = 0x54
+      let [<Literal>] accentPattern   = 0x9e
+      let [<Literal>] accentAmount    = 0xb1
+      let [<Literal>] patternLength   = 0xb2
+      let [<Literal>] multiplier      = 0xb3
+      *)
+
+  
+  let validateSysexShape (sysex: sysex_data) =
+    if not (areMachineDrumCheckSumAndLengthValid sysex) then
+      failwithf "invalid check sum"
+    else
+      let messageType = LanguagePrimitives.EnumOfValue (UMX.untag_sysex sysex.[0x6])
+      match messageType with
+      | MachineDrumSysexMessageId.Kit ->
+        if Sizes.kit <> sysex.Length then
+          failwithf "kit supposed to be %i but got %i" Sizes.kit sysex.Length
+      | MachineDrumSysexMessageId.Pattern ->
+        match sysex.Length with
+        | Sizes.patternShort | Sizes.patternLong -> ()
+        | _ -> failwithf "pattern supposed to be %i or %i but got %i" Sizes.patternShort Sizes.patternLong sysex.Length
+      | otherwise ->
+          failwithf "non checked message id %A" otherwise
+
+        
 
 [<Struct>]
 type LFOType = private SDULFOType of byte
@@ -63,8 +151,6 @@ module MachineSpecs =
   let kits           = UMX.tag_byte_7bits [|0uy..63uy|]
   let songs          = UMX.tag_byte_7bits [|0uy..31uy|]
   let globalSettings = UMX.tag_byte_7bits [|0uy..7uy|]
-
-
 
 [<RequireQualifiedAccess>]
 type Track =
@@ -257,35 +343,38 @@ with
     | 38uy | 62uy | 94uy | 118uy -> LFOAmount
     | 39uy | 63uy | 95uy | 119uy -> LFOShapeMix
     | i   -> failwithf "unknown parameter for cc %i" i
-type MDMachineSettings(bytes: sysex_data, offset: int, machineType: MDMachineType) =
-  let baseAddress = 0x1a + (offset * 24)
-  let getAt a : byte_7bits    = UMX.to_byte_7bits bytes.[baseAddress + a]
-  let setAt a (v: byte_7bits) = bytes.[baseAddress + a] <- UMX.tag_sysex_data ((UMX.untag_byte_7bits v) &&& 0b01111111uy)
-  member x.SynthesisParameters          = UMX.to_byte_7bits (SysexBufferEdit.getSlice baseAddress 8 bytes)
-  member x.Parameter1                   = UMX.to_byte_7bits bytes.[baseAddress + 0]
-  member x.Parameter2                   = UMX.to_byte_7bits bytes.[baseAddress + 1]
-  member x.Parameter3                   = UMX.to_byte_7bits bytes.[baseAddress + 2]
-  member x.Parameter4                   = UMX.to_byte_7bits bytes.[baseAddress + 3]
-  member x.Parameter5                   = UMX.to_byte_7bits bytes.[baseAddress + 4]
-  member x.Parameter6                   = UMX.to_byte_7bits bytes.[baseAddress + 5]
-  member x.Parameter7                   = UMX.to_byte_7bits bytes.[baseAddress + 6]
-  member x.Parameter8                   = UMX.to_byte_7bits bytes.[baseAddress + 7]
-  member x.AmplitudeModulationDepth     = UMX.to_byte_7bits bytes.[baseAddress + 8]
-  member x.AmplitudeModulationFrequency = UMX.to_byte_7bits bytes.[baseAddress + 9]
-  member x.EqualizerFrequency           = UMX.to_byte_7bits bytes.[baseAddress + 10]
-  member x.EqualizerQ                   = UMX.to_byte_7bits bytes.[baseAddress + 11]
-  member x.FilterBase                   = UMX.to_byte_7bits bytes.[baseAddress + 12]
-  member x.FilterWidth                  = UMX.to_byte_7bits bytes.[baseAddress + 13]
-  member x.FilterResonnance             = UMX.to_byte_7bits bytes.[baseAddress + 14]
-  member x.SampleRateReduction          = UMX.to_byte_7bits bytes.[baseAddress + 15]
-  member x.Distortion                   = UMX.to_byte_7bits bytes.[baseAddress + 16]
-  member x.Volume                       = UMX.to_byte_7bits bytes.[baseAddress + 17]
-  member x.Pan                          = UMX.to_byte_7bits bytes.[baseAddress + 18]
+    
+    
+    
+type MDMachineSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>, trackIndex: int, machineType: MDMachineType) =
+  let baseAddress = Sysex.Offsets.Kit.trackParameters
+  let getAt a = bytes.Get (a + baseAddress) 
+  let setAt address = bytes.Set (address + baseAddress)
+  member x.SynthesisParameters          = bytes.GetSlice baseAddress 8
+  member x.Parameter1                   = getAt 0
+  member x.Parameter2                   = getAt 1
+  member x.Parameter3                   = getAt 2
+  member x.Parameter4                   = getAt 3
+  member x.Parameter5                   = getAt 4
+  member x.Parameter6                   = getAt 5
+  member x.Parameter7                   = getAt 6
+  member x.Parameter8                   = getAt 7
+  member x.AmplitudeModulationDepth     = getAt 8
+  member x.AmplitudeModulationFrequency = getAt 9
+  member x.EqualizerFrequency           = getAt 10
+  member x.EqualizerQ                   = getAt 11
+  member x.FilterBase                   = getAt 12
+  member x.FilterWidth                  = getAt 13
+  member x.FilterResonnance             = getAt 14
+  member x.SampleRateReduction          = getAt 15
+  member x.Distortion                   = getAt 16
+  member x.Volume                       = getAt 17
+  member x.Pan                          = getAt 18
   member x.DelaySend  with get () = getAt 19 and set v = setAt 19 v
   member x.ReverbSend with get () = getAt 20 and set v = setAt 20 v
-  member x.LFOSpeed                     = UMX.to_byte_7bits bytes.[baseAddress + 21]
-  member x.LFODepth                     = UMX.to_byte_7bits bytes.[baseAddress + 22]
-  member x.LFOShapeMix                  = UMX.to_byte_7bits bytes.[baseAddress + 23]
+  member x.LFOSpeed                     = getAt 21
+  member x.LFODepth                     = getAt 22
+  member x.LFOShapeMix                  = getAt 23
   member x.GetTrackParameters =
     [|
       MachineParameter1   , x.Parameter1
@@ -485,10 +574,10 @@ with
       Mix
     |]
     
-type EqualizerSettings(bytes: sysex_data) =
-  let baseAddress = 0x497
-  let getAt = SysexBufferEdit.getAt bytes baseAddress
-  let setAt = SysexBufferEdit.setAt bytes baseAddress
+type EqualizerSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>) =
+  let baseAddress = Sysex.Offsets.Kit.equalizer
+  let getAt a = bytes.Get (a + baseAddress) 
+  let setAt address = bytes.Set (address + baseAddress)
   member x.LowShelfFrequency   with get () = getAt 0 and set v = setAt 0 v
   member x.LowShelfGain        with get () = getAt 1 and set v = setAt 1 v
   member x.HighShelfFrequency  with get () = getAt 2 and set v = setAt 2 v
@@ -498,10 +587,10 @@ type EqualizerSettings(bytes: sysex_data) =
   member x.ParametricQ         with get () = getAt 6 and set v = setAt 6 v
   member x.Gain                with get () = getAt 7 and set v = setAt 7 v
 
-type CompressorSettings(bytes: sysex_data) =
-  let baseAddress = 0x49f
-  let getAt = SysexBufferEdit.getAt bytes baseAddress
-  let setAt = SysexBufferEdit.setAt bytes baseAddress
+type CompressorSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>) =
+  let baseAddress = Sysex.Offsets.Kit.compressor
+  let getAt a = bytes.Get (a + baseAddress) 
+  let setAt address = bytes.Set (address + baseAddress)
   member x.Attack            with get () = getAt 0 and set v = setAt 0 v
   member x.Release           with get () = getAt 1 and set v = setAt 1 v
   member x.Threshold         with get () = getAt 2 and set v = setAt 2 v
@@ -511,21 +600,10 @@ type CompressorSettings(bytes: sysex_data) =
   member x.OutputGain        with get () = getAt 6 and set v = setAt 6 v
   member x.Mix               with get () = getAt 7 and set v = setAt 7 v
 
-
-
-
-
-
-
-
-
-
-
-
-type DelaySettings(bytes: sysex_data) =
-  let baseAddress = 0x48f
-  let getAt = SysexBufferEdit.getAt bytes baseAddress
-  let setAt = SysexBufferEdit.setAt bytes baseAddress
+type DelaySettings(bytes: NonZeroIndexedArraySegment<byte_7bits>) =
+  let baseAddress = Sysex.Offsets.Kit.delay
+  let getAt a = bytes.Get (a + baseAddress) 
+  let setAt address = bytes.Set (address + baseAddress)
   member x.Time                with get () = getAt 0 and set v = setAt 0 v
   member x.Modulation          with get () = getAt 1 and set v = setAt 1 v
   member x.ModulationFrequency with get () = getAt 2 and set v = setAt 2 v
@@ -535,10 +613,10 @@ type DelaySettings(bytes: sysex_data) =
   member x.Mono                with get () = getAt 6 and set v = setAt 6 v
   member x.Level               with get () = getAt 7 and set v = setAt 7 v
 
-type ReverbSettings(bytes: sysex_data) =
-  let baseAddress = 0x487
-  let getAt = SysexBufferEdit.getAt bytes baseAddress
-  let setAt = SysexBufferEdit.setAt bytes baseAddress
+type ReverbSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>) =
+  let baseAddress = Sysex.Offsets.Kit.reverb
+  let getAt a = bytes.Get (a + baseAddress) 
+  let setAt address = bytes.Set (address + baseAddress)
   member x.DelayToReverb with get () = getAt 0 and set v = setAt 0 v
   member x.PreDelay      with get () = getAt 1 and set v = setAt 1 v
   member x.Decay         with get () = getAt 2 and set v = setAt 2 v
@@ -609,34 +687,33 @@ module Fooppp =
     |]
 open Midi
 
-type MDKit private (bytes: sysex_data) =
-  //private new (bytes: byte array) = { bytes = bytes }
-  let setDataSlice s l = SysexBufferEdit.setSlice s l bytes
-  let getDataSlice s l : data = UMX.to_byte_7bits(SysexBufferEdit.getSlice s l bytes)
-  member x.data = bytes
-  member x.Position = bytes.[0x09]
-  #if FABLE_COMPILER
-  #else
-  member x.Name     
-    with get ()         = getDataSlice 0x0a 16 |> unbox |> ASCIIEncoding.Default.GetString
-    and set (v: string) = setDataSlice 0x0a 16 (unbox (ASCIIEncoding.Default.GetBytes v))
-  #endif
-  member x.ReverbSettings = ReverbSettings bytes
-  member x.DelaySettings = DelaySettings bytes
-  member x.EqualizerSettings = EqualizerSettings bytes
-  member x.CompressorSettings = CompressorSettings bytes
-  member x.unpacked =
-    if areMachineDrumCheckSumAndLengthValid bytes then
-      getMachineDrumDataSliceFromSysexMessage bytes
-      |> Seq.toArray
-      |> dataToByte
-    else [||]
-  member x.SelectedDrumModel =
-    let address = 0x1aa
-    getDataSlice address 74 
-    |> unbox
+
+type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
+  do
+    assert (bytes.LogicalOffset = Sysex.Offsets.Kit.kit)
+  let setDataSlice address expectedLength newBytes =
+    let data = byteToData newBytes
+    if data.Length <> expectedLength then failwithf "was expecting length of %i but got %i" expectedLength data.Length
+    bytes.Blit address data.Length data
+    
+  let getDataSlice address length =
+    let dataSlice = bytes.GetSlice address length
+    dataSlice
     |> dataToByte
-    |> unbox
+    
+  member x.Position = bytes.Get Sysex.Offsets.Kit.kit
+  member x.Name     
+    with get ()         = bytes.GetSlice 0x0a 16 |> unbox |> ASCIIEncoding.Default.GetString
+    and set (v: string) = bytes.Blit 0x0a 16 (unbox (ASCIIEncoding.Default.GetBytes v))
+  
+  member x.ReverbSettings     = ReverbSettings     <| bytes.SubSegment Sysex.Offsets.Kit.reverb 8
+  member x.DelaySettings      = DelaySettings      <| bytes.SubSegment Sysex.Offsets.Kit.delay 8
+  member x.EqualizerSettings  = EqualizerSettings  <| bytes.SubSegment Sysex.Offsets.Kit.equalizer 8
+  member x.CompressorSettings = CompressorSettings <| bytes.SubSegment Sysex.Offsets.Kit.compressor 8
+
+  member x.SelectedDrumModel =
+    let address = Sysex.Offsets.Kit.drumModels
+    getDataSlice address 74 
     |> Array.chunkBySize 4
     |> Array.map fourBytesToBigEndianInt
     |> Array.mapi (fun index i ->
@@ -666,7 +743,7 @@ type MDKit private (bytes: sysex_data) =
     )
   member x.AssignDrumModel track drumModel =
     let index = int (Track.trackValue track)
-    let address = 0x1aa
+    let address = Sysex.Offsets.Kit.drumModels
     let newBytes = 
       match drumModel with 
       | MD machine -> [|0uy; 0uy; 0uy; byte machine|]
@@ -680,27 +757,28 @@ type MDKit private (bytes: sysex_data) =
   member x.LFOSettings =
     let address = 0x1f4
     getDataSlice address 659
-    |> dataToByte
     |> Array.chunkBySize 36
     |> Array.map MDLFOSetting
   member x.TrigGroups =
     let address = 0x04a7
     getDataSlice address 37
-    |> dataToByte
     |> TrigGroups
   member x.TrackLevels =
     let address = 0x19a
     getDataSlice address 16
+  member private x.ContentAsBytes = bytes.Array
   override x.Equals other =
     match other with
-    | :? MDKit as other -> bytes = other.data
+    | :? MDKit as other -> x.ContentAsBytes = other.ContentAsBytes
     | _ -> false
-  override x.GetHashCode () = hash bytes
-
-
-  static member empty = 
-    [||]
-  static member fromSysex bytes =  MDKit bytes
+  override x.GetHashCode () = hash bytes.Array
+    
+  static member fromSysex sysex =
+    Sysex.validateSysexShape sysex
+    let segment = ArraySegment(UMX.to_byte_7bits sysex, Sysex.Offsets.Kit.kit, sysex.Length - 14)
+    let segment = NonZeroIndexedArraySegment(Sysex.Offsets.Kit.kit, segment)
+    MDKit segment
+    
   static member drumModelsAreAllEmpty (kit: MDKit) = kit.SelectedDrumModel = Array.create 16 (MDMachineType.MD MDMachine.GND_EM)
 
 
@@ -710,46 +788,49 @@ type MDTempoMultiplier =
 | ThreeOverFour
 | ThreeOverTwo
 
-type MDPattern(bytes: sysex_data) =
+type MDPattern private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
   let isLongFormat =
     bytes.Length > 0x1521
-  let getBytes offset length =
-    bytes 
-    |> SysexBufferEdit.getDataSlice offset length
-    |> dataToByte
-    
+   
   let extraPatternInfo =
     if isLongFormat then
-      getBytes 0xac6 2647
+      bytes.GetSlice 0xac6 2647 |> dataToByte
     else
       [||]
   member x.data = bytes
-  member x.NumberOfSteps    = bytes.[0xb2]
-  member x.OriginalPosition = bytes.[0x9]
-  member x.AccentAmount     = bytes.[0xb1]
-  member x.AccentPattern    = getBytes 0x9e 19
-  member x.LockPattern      = getBytes 0x54 74
+  member x.NumberOfSteps    = bytes.Get 0xb2
+  member x.OriginalPosition = bytes.Get 0x9
+  member x.AccentAmount     = bytes.Get 0xb1
+  member x.AccentPattern    = dataToByte (bytes.GetSlice 0x9e 19)
+  member x.LockPattern      = dataToByte (bytes.GetSlice 0x54 74)
   member x.TrigPattern      = 
-    let baseTrigs = getBytes 0xa 74
+    let baseTrigs = dataToByte (bytes.GetSlice 0xa 74)
     if isLongFormat then
       Array.concat [baseTrigs; SysexBufferEdit.getSlice 0x0 0x40 extraPatternInfo]
     else
       baseTrigs
   member x.TempoMultiplier  =
-    match UMX.untag_sysex bytes.[0xb3] with
+    match UMX.untag_byte_7bits (bytes.Get 0xb3) with
     | 0uy -> One
     | 1uy -> Two
     | 2uy -> ThreeOverFour
     | 3uy -> ThreeOverTwo
     | x -> failwithf "%i" x
-  member x.Scale = (UMX.untag_sysex (bytes.[0xb4]) + 1uy) * 16uy
-  member x.Kit = bytes.[0xb5]
-  member x.Locks = getBytes 0xb7 2341
+  member x.Scale = (UMX.untag_sysex (bytes.Get 0xb4) + 1uy) * 16uy
+  member x.Kit = bytes.Get 0xb5
+  member x.Locks = bytes.GetSlice 0xb7 2341
   override x.GetHashCode () = hash bytes
   override x.Equals other =
     match other with
     | :? MDPattern as other -> x.data = other.data
     | _ -> false
+  
+  static member fromSysex (sysex: sysex_data) =
+    let segment = ArraySegment(UMX.to_byte_7bits sysex, Sysex.Offsets.Pattern.pattern, sysex.Length - 14)
+    let segment = NonZeroIndexedArraySegment(Sysex.Offsets.Pattern.pattern ,segment)
+    MDPattern segment
+        
+
 type MDSong(bytes: sysex_data) =
   member x.data = bytes
 
@@ -921,11 +1002,7 @@ type MDGlobalSettings(bytes: byte array) =
     bytes.[0xad]
     |> function | 127uy -> None | v -> Some v
     *)
-type MachineDrumSysexMessageId =
-| Global  = 0x50uy
-| Kit     = 0x52uy
-| Pattern = 0x67uy
-| Song    = 0x69uy
+
 
 type MachineDrumSysexResponses =
 | GlobalSettingsResponse of GlobalSettings
@@ -946,7 +1023,7 @@ with
     match UMX.untag_sysex sysex.[6] with
     | 0x50uy -> Some (GlobalSettingsResponse (GlobalSettings.FromSysex sysex)             )
     | 0x52uy -> Some (KitResponse (MDKit.fromSysex sysex)                                 )
-    | 0x67uy -> Some (PatternResponse (MDPattern sysex)                                   )
+    | 0x67uy -> Some (PatternResponse (MDPattern.fromSysex sysex)                         )
     | 0x69uy -> Some (SongResponse (MDSong sysex)                                         )
     | 0x72uy -> Some (StatusResponse (MachineDrumStatusType.FromByte (UMX.untag_sysex sysex.[7]), UMX.to_byte_7bits sysex.[8]))
     | _ ->

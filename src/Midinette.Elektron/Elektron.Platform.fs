@@ -84,7 +84,7 @@ let fourBytesToBigEndianInt b = BitConverter.ToInt32 (b, 0) |> toBigEndian
 let getMachineDrumDataSliceFromSysexMessage data = ArraySegment(data, 0x9, (Array.length data) - 14)
 let getMonoMachineDataSliceFromSysexMessage data = ArraySegment(data, 0xa, (Array.length data) - 15)
 *)
-
+#if FALSE
 type ArraySegment<'a>(data: 'a array, s: int, l: int) = 
   // FABLE TODO!!!!!!!!!!!!!!!
   let a = ()
@@ -92,7 +92,7 @@ type ArraySegment<'a>(data: 'a array, s: int, l: int) =
     member x.GetEnumerator() = (data:> IEnumerable<_>).GetEnumerator()
   interface System.Collections.IEnumerable with
     member x.GetEnumerator() = (data:> System.Collections.IEnumerable).GetEnumerator()
-
+#endif
 let inline getMachineDrumDataSliceFromSysexMessage (data: sysex_data) : ArraySegment<byte_7bits> = ArraySegment(unbox data, 0x9, (Array.length data) - 14)
 let inline getMonoMachineDataSliceFromSysexMessage (data: sysex_data) : ArraySegment<byte_7bits> = ArraySegment(unbox data, 0xa, (Array.length data) - 15)
 
@@ -114,26 +114,21 @@ let checkSum (data: byte<_> seq) =
 // FABLE TODO
 
 let areMachineDrumCheckSumAndLengthValid data =
-  
   let checkSum = 
     getMachineDrumDataSliceFromSysexMessage data
     |> checkSum
   let length = (Array.length data) - 10
   let expectedCheckSum = int (getCheckSumFromSysexMessage data)
   let expectedLength = int (getLengthFromSysexMessage data)
-  printfn "%i %i %i %i" length expectedLength checkSum expectedCheckSum
   length = expectedLength && checkSum = expectedCheckSum
   
 let areMonoMachineCheckSumAndLengthValid (data: sysex_data) =
-  
   let checkSum = 
-    //getMonoMachineDataSliceFromSysexMessage data
     data.[0x0a .. data.Length - 6]
     |> checkSum
   let length = (Array.length data) - 10
   let expectedCheckSum = int (getCheckSumFromSysexMessage data)
   let expectedLength = int (getLengthFromSysexMessage data)
-  printfn "%i %i %i %i" length expectedLength checkSum expectedCheckSum
   length = expectedLength && checkSum = expectedCheckSum
   
 module SilverMachines =
