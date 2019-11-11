@@ -12,13 +12,13 @@ open Midinette.Sysex
 
 type NonZeroIndexedArraySegment<'t>(baseLogicalAddress: int, segment: ArraySegment<'t>) =
   let checkAddress address =
-    if address < baseLogicalAddress then failwithf "can't query bellow base logical address"
+    if address < baseLogicalAddress then failwithf "can't query at %i which is bellow base logical address %i" address baseLogicalAddress
     let address = address - baseLogicalAddress
-    if address >= segment.Count then failwithf "can't query after the segment"
+    if address >= segment.Count then failwithf "can't query at %i which is past the segment (length: %i)" address segment.Count
     address
   let checkAddressAndLength address length =
     let address = checkAddress address
-    if length > segment.Count then failwithf "can't query length past segment"
+    if length > segment.Count then failwithf "can't query at %i elements from %i which is past the segment (length: %i)" length address segment.Count
     address
   member x.LogicalOffset = baseLogicalAddress
   member x.Get address =
@@ -29,7 +29,7 @@ type NonZeroIndexedArraySegment<'t>(baseLogicalAddress: int, segment: ArraySegme
     let address = checkAddress address
     segment.Array.[segment.Offset + address] <- value
 
-  member x.Array = segment.Array.[segment.Offset .. (segment.Count - 1)]
+  member x.Array = segment.Array.[segment.Offset .. (segment.Offset + (segment.Count - 1))]
   member x.GetSlice address length =
     let address = checkAddressAndLength address length
     let slice = segment.Array.[segment.Offset + address .. (segment.Offset + address + length - 1)]
@@ -89,7 +89,7 @@ module Sysex =
     let [<Literal>] kit = 0x4D1
     let [<Literal>] patternShort = 0xacd
     let [<Literal>] patternLong = 0x1522
-    
+    let [<Literal>] globalsSettings = 0xc5
   module Offsets =
     let [<Literal>] messageId = 0x6 
     module Kit =
@@ -100,6 +100,8 @@ module Sysex =
       let [<Literal>] delay           = 0x48f
       let [<Literal>] equalizer       = 0x497
       let [<Literal>] compressor      = 0x49f
+      let [<Literal>] checksum        = 0x4cc
+      let [<Literal>] messageLength   = 0x4ce
     module Pattern =
       let [<Literal>] pattern         = 0x9
     (*  let [<Literal>] trigPattern     = 0xa
@@ -109,8 +111,39 @@ module Sysex =
       let [<Literal>] patternLength   = 0xb2
       let [<Literal>] multiplier      = 0xb3
       *)
+  module Empty =
+    let newKitBuffer () =
+       NonZeroIndexedArraySegment<_>(Offsets.Kit.kit, new ArraySegment<_>(Array.zeroCreate Sizes.kit))
+  module Versions =
+    module Kit =
+      let [<Literal>] version  = 0x4uy
+      let [<Literal>] revision = 0x1uy
+      
+  let makeMachineDrumSysexMessageWithChecksum messageType (messageBluePart: data) : sysex_data =
+    let version, revision =
+      match messageType with
+      | MachineDrumSysexMessageId.Kit -> Versions.Kit.version, Versions.Kit.revision
+    
+    let sysexEnd = 0xf7uy
+    let checksumBytes = 
+      checkSum messageBluePart
+      |> word14To2bytes
 
-  
+    let messageLength = 
+      (messageBluePart.Length + 4)
+      |> word14To2bytes
+
+    [|
+      yield! mdHeader
+      yield  UMX.tag_sysex_data (byte messageType)
+      yield! UMX.tag_sysex_data [|version;revision|]
+      yield! UMX.to_sysex_data  messageBluePart;
+      yield! UMX.tag_sysex_data checksumBytes 
+      yield! UMX.tag_sysex_data messageLength
+      yield  UMX.tag_sysex_data sysexEnd
+    |]
+    
+      
   let validateSysexShape (sysex: sysex_data) =
     if not (areMachineDrumCheckSumAndLengthValid sysex) then
       failwithf "invalid check sum"
@@ -124,6 +157,9 @@ module Sysex =
         match sysex.Length with
         | Sizes.patternShort | Sizes.patternLong -> ()
         | _ -> failwithf "pattern supposed to be %i or %i but got %i" Sizes.patternShort Sizes.patternLong sysex.Length
+      | MachineDrumSysexMessageId.Global ->
+        if sysex.Length <> Sizes.globalsSettings then
+            failwithf "globalsettings supposed to be %i but got %i" Sizes.globalsSettings sysex.Length
       | otherwise ->
           failwithf "non checked message id %A" otherwise
 
@@ -205,6 +241,8 @@ type MasterEffect =
 with
   static member asByte = function | Delay -> 0x5duy | Reverb -> 0x5euy | Equalizer -> 0x5fuy | Compressor -> 0x60uy
   
+  
+  
 type MDMachine =
 | GND_EM =  00uy | GND_SN =  01uy | GND_NS =  02uy | GND_IM =  03uy
 | TRX_BD =  16uy | TRX_SD =  17uy | TRX_XT =  18uy | TRX_CP =  19uy | TRX_RS =  20uy | TRX_CB =  21uy | TRX_CH =  22uy | TRX_OH =  23uy
@@ -245,9 +283,69 @@ type MDUWMachine =
 | RAM_P3 = 39uy
 | RAM_P4 = 40uy
 
+
+type MDMachineKind =
+  | GND
+  | TRX
+  | EFM
+  | E12
+  | PI
+  | INP
+  | MID
+  | CTR
+  | ROM
+  | RAM
+
 type MDMachineType =
 | MD of MDMachine
 | MDUW of MDUWMachine
+  member x.Kind =
+    match x with
+    | MD m ->
+      match m with
+      |MDMachine.GND_EM|MDMachine.GND_IM|MDMachine.GND_NS|MDMachine.GND_SN -> GND
+      |MDMachine.TRX_BD|MDMachine.TRX_SD|MDMachine.TRX_XT|MDMachine.TRX_CP
+      |MDMachine.TRX_RS|MDMachine.TRX_CB|MDMachine.TRX_CH|MDMachine.TRX_OH
+      |MDMachine.TRX_CY|MDMachine.TRX_MA|MDMachine.TRX_CL|MDMachine.TRX_XC|MDMachine.TRX_B2 -> TRX
+      |MDMachine.EFM_BD|MDMachine.EFM_SD|MDMachine.EFM_XT|MDMachine.EFM_CP
+      |MDMachine.EFM_RS|MDMachine.EFM_CB|MDMachine.EFM_HH|MDMachine.EFM_CY -> EFM
+      |MDMachine.E12_BD|MDMachine.E12_SD|MDMachine.E12_HT |MDMachine.E12_LT|MDMachine.E12_CP|MDMachine.E12_RS|MDMachine.E12_CB|MDMachine.E12_CH
+      |MDMachine.E12_OH|MDMachine.E12_RC|MDMachine.E12_CC |MDMachine.E12_BR|MDMachine.E12_TA|MDMachine.E12_TR|MDMachine.E12_SH|MDMachine.E12_BC -> E12 
+      |MDMachine.P_I_BD|MDMachine.P_I_SD|MDMachine.P_I_MT|MDMachine.P_I_ML|MDMachine.P_I_MA|MDMachine.P_I_RS|MDMachine.P_I_RC|MDMachine.P_I_CC
+      |MDMachine.P_I_HH -> PI
+      |MDMachine.INP_GA|MDMachine.INP_GB|MDMachine.INP_FA|MDMachine.INP_FB|MDMachine.INP_EA|MDMachine.INP_EB -> INP
+      |MDMachine.MID_01|MDMachine.MID_02|MDMachine.MID_03|MDMachine.MID_04|MDMachine.MID_05|MDMachine.MID_06|MDMachine.MID_07|MDMachine.MID_08
+      |MDMachine.MID_09|MDMachine.MID_10|MDMachine.MID_11|MDMachine.MID_12|MDMachine.MID_13|MDMachine.MID_14|MDMachine.MID_15|MDMachine.MID_16 -> MID
+      |MDMachine.CTR_AL|MDMachine.CTR_8P|MDMachine.CTR_RE|MDMachine.CTR_GB|MDMachine.CTR_EQ|MDMachine.CTR_DX -> CTR
+      | _ -> failwithf "kind %A" m
+    | MDUW m ->
+      match m with
+      |MDUWMachine.ROM_01|MDUWMachine.ROM_17|MDUWMachine.ROM_33
+      |MDUWMachine.ROM_02|MDUWMachine.ROM_18|MDUWMachine.ROM_34
+      |MDUWMachine.ROM_03|MDUWMachine.ROM_19|MDUWMachine.ROM_35
+      |MDUWMachine.ROM_04|MDUWMachine.ROM_20|MDUWMachine.ROM_36
+      |MDUWMachine.ROM_05|MDUWMachine.ROM_21|MDUWMachine.ROM_37
+      |MDUWMachine.ROM_06|MDUWMachine.ROM_22|MDUWMachine.ROM_38
+      |MDUWMachine.ROM_07|MDUWMachine.ROM_23|MDUWMachine.ROM_39
+      |MDUWMachine.ROM_08|MDUWMachine.ROM_24|MDUWMachine.ROM_40
+      |MDUWMachine.ROM_09|MDUWMachine.ROM_25|MDUWMachine.ROM_41
+      |MDUWMachine.ROM_10|MDUWMachine.ROM_26|MDUWMachine.ROM_42
+      |MDUWMachine.ROM_11|MDUWMachine.ROM_27|MDUWMachine.ROM_43
+      |MDUWMachine.ROM_12|MDUWMachine.ROM_28|MDUWMachine.ROM_44
+      |MDUWMachine.ROM_13|MDUWMachine.ROM_29|MDUWMachine.ROM_45
+      |MDUWMachine.ROM_14|MDUWMachine.ROM_30|MDUWMachine.ROM_46
+      |MDUWMachine.ROM_15|MDUWMachine.ROM_31|MDUWMachine.ROM_47
+      |MDUWMachine.ROM_16|MDUWMachine.ROM_32|MDUWMachine.ROM_48 -> ROM
+      |MDUWMachine.RAM_R1
+      |MDUWMachine.RAM_R2
+      |MDUWMachine.RAM_P1
+      |MDUWMachine.RAM_P2
+      |MDUWMachine.RAM_R3
+      |MDUWMachine.RAM_R4
+      |MDUWMachine.RAM_P3
+      |MDUWMachine.RAM_P4 -> RAM
+      | _ -> failwithf "kind uw %A" m
+
   member x.HasPitch =
     match x with
     | MDUW (MDUWMachine.RAM_R1|MDUWMachine.RAM_R2|MDUWMachine.RAM_R3|MDUWMachine.RAM_R4) -> false
@@ -292,8 +390,11 @@ with
     FilterBaseFrequency ; FilterWidth       ; FilterQ           ; SampleRateReduction
     Distortion          ; Volume            ; Pan               ; DelaySend
     ReverbSend          ; LFOSpeed          ; LFOAmount         ; LFOShapeMix    
-        
   |]
+  static member synthesisParameters = MDTrackParameter.all.[0..7]
+  static member effectsParameters = MDTrackParameter.all.[8..15]
+  static member routingParameters = MDTrackParameter.all.[16..23]
+    
   static member fromCCOffset offset =
     match UMX.untag_byte_7bits offset with
     | 00uy -> MachineParameter1  | 01uy -> MachineParameter2 | 02uy -> MachineParameter3 | 03uy -> MachineParameter4  
@@ -700,7 +801,6 @@ type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     let dataSlice = bytes.GetSlice address length
     dataSlice
     |> dataToByte
-    
   member x.Position = bytes.Get Sysex.Offsets.Kit.kit
   member x.Name     
     with get ()         = bytes.GetSlice 0x0a 16 |> unbox |> ASCIIEncoding.Default.GetString
@@ -779,9 +879,11 @@ type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     let segment = NonZeroIndexedArraySegment(Sysex.Offsets.Kit.kit, segment)
     MDKit segment
     
+  static member toSysex (mdKit: MDKit) =
+    Sysex.makeMachineDrumSysexMessageWithChecksum MachineDrumSysexMessageId.Kit mdKit.ContentAsBytes
+    
   static member drumModelsAreAllEmpty (kit: MDKit) = kit.SelectedDrumModel = Array.create 16 (MDMachineType.MD MDMachine.GND_EM)
-
-
+  static member empty = Sysex.Empty.newKitBuffer () |> MDKit
 type MDTempoMultiplier =
 | One
 | Two
@@ -970,7 +1072,8 @@ type GlobalSettings = {
 with 
   static member ToSysex globals =
     [||]
-  static member FromSysex (bytes: sysex_data) =
+  static member fromSysex (bytes: sysex_data) =
+    Sysex.validateSysexShape bytes
     let originalPosition = bytes.[0x09]
     let drumRoutingTable = bytes |> SysexBufferEdit.getDataSlice 0x0a 16 |> Array.map Output.FromByte
     let keymapStructure = 
@@ -1021,7 +1124,7 @@ with
     | StatusResponse _ -> 0x72uy
   static member BuildResponse (sysex: sysex_data) =
     match UMX.untag_sysex sysex.[6] with
-    | 0x50uy -> Some (GlobalSettingsResponse (GlobalSettings.FromSysex sysex)             )
+    | 0x50uy -> Some (GlobalSettingsResponse (GlobalSettings.fromSysex sysex)             )
     | 0x52uy -> Some (KitResponse (MDKit.fromSysex sysex)                                 )
     | 0x67uy -> Some (PatternResponse (MDPattern.fromSysex sysex)                         )
     | 0x69uy -> Some (SongResponse (MDSong sysex)                                         )
@@ -1198,7 +1301,6 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
    
   member x.EventToMidiMessages (mdEvent: MachineDrumEvent) globals =
       let channel = globals.MidiBaseChannel
-      //globals.KeymapStructure.GetTriggerNotesForBank
       let track = mdEvent.Track
       let note = 
           match track with

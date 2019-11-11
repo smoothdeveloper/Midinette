@@ -13,6 +13,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\ElektronControl\ToolLib\ToolLib.fsproj" />
     <ProjectReference Include="..\..\src\Midinette.Elektron\Midinette.Elektron.fsproj" />
     <ProjectReference Include="..\..\src\Midinette\Midinette.fsproj" />
   </ItemGroup>

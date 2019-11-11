@@ -1,7 +1,5 @@
 ﻿module Elektron.MachineDrum.Parameters
 
-
-
 let effectsParameters =
   [|
     ("AMD", "controls the the modulation depth")
@@ -13,6 +11,7 @@ let effectsParameters =
     ("FLTQ", "controls the filter quality Q parameter")
     ("SRR", "controls the amount of sample rate reduction")
   |]
+  |> Array.zip MDTrackParameter.effectsParameters
 
 let routingParameters =
   [|
@@ -25,6 +24,8 @@ let routingParameters =
     ("LFOD", "controls the modulation depth of the LFO")
     ("LFOM", "controls the mix between the two selectable LFO waveforms")
   |]
+  |> Array.zip MDTrackParameter.routingParameters
+  
 type SynthesisParameterName =
 | Pitch
 | Decay

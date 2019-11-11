@@ -5,7 +5,7 @@ open Hopac
 open Logary
 open Logary.Configuration
 open Logary.Adapters.Facade
-
+open PrettyPrint
 open Elektron.MachineDrum
 open System.IO
 open System.Text
@@ -66,13 +66,24 @@ let tests =
                         printfn "parsed kit %i %s" kit.Position kit.Name                      
                         printfn "\t - drum models: %A" kit.SelectedDrumModel
                         printfn "\t - compressor: %A" kit.CompressorSettings
-                     
+                        let actual = MDKit.toSysex kit
+                        let arrays = Seq.zip actual k |> Seq.indexed
+                        
+                        for i , (a,b) in arrays do
+                            if a <> b then
+                              printBytes (actual.[i ..] )
+                              printBytes k.[i..]
+                            Expect.equal a b (sprintf "roundtrip of kit ends up being different at %i %i <> %i" i a b)
+                        Expect.equal actual.Length k.Length "kit sysex has unexpected length"
                     for p in indexedMessages.[MachineDrumSysexMessageId.Pattern] do
                         let pattern = MDPattern.fromSysex p
                         printfn "parsed pattern %i (%i steps)" pattern.OriginalPosition pattern.NumberOfSteps
                         printTrigPattern pattern
+                    for p in indexedMessages.[MachineDrumSysexMessageId.Global] do
+                        let globalSettings = GlobalSettings.fromSysex p
+                        printfn "parsed global settings %i" globalSettings.OriginalPosition 
+                        printfn "\t - keymap: %A" globalSettings.KeymapStructure
                 
-                ()
             }
         ]
 [<EntryPoint>]
