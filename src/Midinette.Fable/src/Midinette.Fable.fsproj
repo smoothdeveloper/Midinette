@@ -6,10 +6,12 @@
     <OutputPath>..\..\..\build\$(Configuration)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Fable.WebMIDI.fs" />
     <Compile Include="Midinette.Fable.fs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="*.fsproj; *.fs" PackagePath="fable\" />
+    <Content Remove="Fable.WebMIDI.fs" />
     <Content Include="paket.references" />
   </ItemGroup>
   <ItemGroup>

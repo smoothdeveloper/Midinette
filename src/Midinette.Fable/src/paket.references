@@ -1,5 +1,6 @@
-FSharp.Core
-Fable.Core
-dotnet-fable
-Fable.Promise
-Fable.Import.WebMIDI
+group Fable
+  Fable.Core
+  dotnet-fable
+  Fable.Promise
+  Fable.Browser.Dom
+  Fable.Browser.Event
