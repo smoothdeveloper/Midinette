@@ -10,7 +10,7 @@
     <Compile Include="Midinette.Fable.fs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="*.fsproj; *.fs" PackagePath="fable\" />
+    <Content Include="*.fs" PackagePath="fable\" />
     <Content Remove="Fable.WebMIDI.fs" />
     <Content Include="paket.references" />
   </ItemGroup>

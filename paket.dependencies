@@ -1,19 +1,13 @@
 source ../../../github.com/micdah/RtMidi.Core/RtMidi.Core/bin/Debug
-source ../portmidisharp/build/Debug/AnyCPU
 source ../fsnative/build/Debug/AnyCPU
 source https://nuget.org/api/v2
 storage: none
 github fsprojects/FSharp.UMX src/FSharp.UMX.fs
-nuget FSharp.Core = 4.6.2
+nuget FSharp.Core = 5
 nuget fsnative
 nuget PortMidiSharp
 nuget RtMidi.Core = 1.0.59-alpha-3
-
-
-group Build
-  source https://nuget.org/api/v2
-  framework >= net461
-  #nuget FAKE
+nuget dotnet-fable
   
 group Test
     source https://nuget.org/api/v2
@@ -27,7 +21,6 @@ group Fable
     source https://nuget.org/api/v2
     storage: none
 
-    clitool dotnet-fable
     nuget Thoth.Fetch prerelease
     nuget Fable.Core prerelease
     nuget Fable.Fetch prerelease

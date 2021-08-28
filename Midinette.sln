@@ -14,6 +14,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bits", "bits", "{4DB40A2C-FD24-4CD5-9B3F-A83315262C86}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
+		.config\dotnet-tools.json = .config\dotnet-tools.json
 		license.md = license.md
 		paket.dependencies = paket.dependencies
 		paket.lock = paket.lock

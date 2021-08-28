@@ -1,6 +1,5 @@
 group Fable
   Fable.Core
-  dotnet-fable
   Fable.Promise
   Fable.Browser.Dom
   Fable.Browser.Event

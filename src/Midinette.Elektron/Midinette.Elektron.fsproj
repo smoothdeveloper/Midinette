@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net45</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net48;net5.0</TargetFrameworks>
     <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
   </PropertyGroup>
   <ItemGroup>
@@ -11,9 +11,7 @@
     <Compile Include="Elektron.fs" />
     <Compile Include="Elektron.Platform.fs" />
     <Compile Include="Elektron.MachineDrum.fs" />
-    <Compile Include="Elektron.MachineDrum.Detection.fs" />
     <Compile Include="Elektron.MachineDrum.Parameters.fs" />
-    <Compile Include="Elektron.MachineDrum.MetaModel.fs" />
     <Compile Include="Elektron.MonoMachine.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
