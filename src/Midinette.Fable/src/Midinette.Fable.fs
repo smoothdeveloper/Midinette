@@ -6,6 +6,7 @@ module WM = Fable.WebMIDI
 type DeviceInfo(port: WM.IMIDIPort) =
   member x.Port = port
   interface IDeviceInfo with
+    //member x.DeviceId = port.Id |> int
     member x.Name = sprintf "id:%20A name:%20A manufacturer:%A" port.Id port.Name.Value port.Manufacturer
 
 type MyMidiIn(input: WM.IMIDIInput, onMidiIn, onStateChange) =
@@ -32,7 +33,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
   let realtimeMessageReceived = new Event<_>()
 
   do
-    let midiIn = this :> IMidiInput<double>
+    let _midiIn = this :> IMidiInput<double>
 
     webMidiInput.set_OnMidiMessage (fun mm ->
       let midiMessage = Midi.MidiMessage.Encode mm.Data.[0] mm.Data.[1] mm.Data.[2]
@@ -53,7 +54,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
   interface IMidiInput<double> with
     member x.DeviceInfo = DeviceInfo(webMidiInput) :> _
     member x.Close () = webMidiInput.Close () |> ignore
-    member x.Open bufferSize = webMidiInput.Open() |> ignore
+    member x.Open _bufferSize = webMidiInput.Open() |> ignore
     [<CLIEvent>] member x.Error                   = error.Publish
     [<CLIEvent>] member x.ChannelMessageReceived  = channelMessageReceived.Publish
     [<CLIEvent>] member x.SystemMessageReceived   = systemMessageReceived.Publish
@@ -63,7 +64,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
 
 type WebMIDIOutputPortWrapper(webMidiOutput: WM.IMIDIOutput, device, onStateChange) as this =
     do
-        let midiOut = this :> IMidiOutput<double>
+        let _midiOut = this :> IMidiOutput<double>
         
         webMidiOutput.set_OnStateChange (fun sc ->
             match onStateChange with
@@ -72,12 +73,12 @@ type WebMIDIOutputPortWrapper(webMidiOutput: WM.IMIDIOutput, device, onStateChan
         )
 
     interface IMidiOutput<double> with
-        member x.Open bufferSize latency = ()
+        member x.Open _bufferSize _latency = ()
         member x.Close () = ()
         member x.WriteMessage timestamp message =
             webMidiOutput.SendAt (float timestamp) [|message.Status; message.Data1; message.Data2|]
         member x.WriteMessages timestamp messages =
-            messages |> Array.iter (((x :> IMidiOutput<_>).WriteMessage )timestamp)
+            messages |> Array.iter (((x :> IMidiOutput<_>).WriteMessage) timestamp)
         member x.WriteSysex timestamp data =
             webMidiOutput.SendAt (float timestamp) (Midi.UMX.untag_sysex data)
         member x.DeviceInfo = (DeviceInfo device) :> _

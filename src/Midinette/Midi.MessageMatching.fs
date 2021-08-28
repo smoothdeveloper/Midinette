@@ -31,10 +31,10 @@ module MessageMatching =
     else
       None
 
-  let (|CC|_|) (channel: byte option) (ccNumber: byte) (midiMessage: MidiMessage) =
+  let (|CC|_|) (channel: byte_7bits option) (ccNumber: byte) (midiMessage: MidiMessage) =
     if 
       midiMessage.MessageType = MidiMessageType.ControllerChange
-      && (Option.isNone channel || midiMessage.Channel = UMX.tag_byte_7bits channel)
+      && (Option.isNone channel || midiMessage.Channel = channel)
       && midiMessage.Data1 = ccNumber
       then
       Some { channel = midiMessage.Channel.Value; control = UMX.tag_byte_7bits midiMessage.Data1; value = UMX.tag_byte_7bits midiMessage.Data2}

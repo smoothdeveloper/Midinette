@@ -32,10 +32,10 @@ module Nrpn =
 
 
   type NRPNChannelRegister<'timestamp>
-    (channel: byte, isExpired: 'timestamp -> bool, zeroTimestamp: 'timestamp) =
+    (channel: byte_7bits, isExpired: 'timestamp -> bool, zeroTimestamp: 'timestamp) =
      
-    let paramNumMSB = 127uy
-    let paramNumLSB = 127uy
+    let _paramNumMSB = 127uy
+    let _paramNumLSB = 127uy
     let mutable firstMessageTimestamp = zeroTimestamp
     let messages = ResizeArray<MidiEvent<'timestamp>> 4
     let nrpnEvent = Event<_>()
@@ -46,7 +46,7 @@ module Nrpn =
       messages.Clear()
 
     let push (startIndex: int) (endIndex: int) =
-      let getBytes (e: MidiEvent<_>) = e.Message.Data1, e.Message.Data2
+      let getBytes (e: MidiEvent<_>) = let m = e.Message in m.Data1, m.Data2
       let messages = [|
         for i in startIndex .. endIndex do
           yield messages.[i]
@@ -66,7 +66,7 @@ module Nrpn =
       if messages.Count >= 3 then
         let mutable startIndex = -1
         let mutable endIndex = -1
-        let maybeMessage = [|
+        let _maybeMessage = [|
           let mutable lastData1 = 0uy
           let mutable count = 0
           let mutable notDone = true
@@ -74,7 +74,7 @@ module Nrpn =
           while notDone do
           //for i in 0 .. messages.Count - 1 do
             if i < messages.Count then
-              let m = messages.[i].Message
+              let m = let item = messages.[i] in item.Message
               if m.Data1 = 99uy then
                 startIndex <- i
                 lastData1 <- m.Data1
@@ -127,10 +127,10 @@ module Nrpn =
     
       clearIfExpired (e.Timestamp)
       match e.Message with
-      | CC (Some channel) 99uy ee -> 
+      | CC (Some channel) 99uy _ee -> 
         clear()
         keepMessage e
-      | CC (Some channel) 98uy ee -> keepMessage e
-      | CC (Some channel) 6uy ee -> keepMessage e
-      | CC (Some channel) 38uy ee -> keepMessage e
+      | CC (Some channel) 98uy _ee -> keepMessage e
+      | CC (Some channel) 6uy  _ee -> keepMessage e
+      | CC (Some channel) 38uy _ee -> keepMessage e
       | _ -> clear()

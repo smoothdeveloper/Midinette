@@ -13,6 +13,7 @@ type short_14bits = byte<bits7'>
 
 type UMX =
   static member inline untag_byte_7bits (byte: byte_7bits)   : byte = unbox byte
+  static member inline untag_byte_7bits (byte: byte_7bits array)   : byte array = unbox byte
   static member inline untag_sysex      (byte: byte<'sysex>) : byte = unbox byte
   static member inline untag_sysex      (bytes: sysex_data) : byte array = unbox bytes
 

@@ -1,5 +1,6 @@
 
 namespace Midinette.Sysex
+#nowarn "1178"
 open Midi
 module Sysex =
   open System
@@ -42,7 +43,7 @@ module Sysex =
       for i in 0 .. (Array.length data) - 1 do
         if data.[i] = 0xf0uy then beginIndex <- i
         elif data.[i] = 0xf7uy then yield getSlice beginIndex (i - beginIndex + 1) data
-    |] |> UMX.tag_sysex_data
+    |] |> Array.map UMX.tag_sysex_data
 
   type DetectedDevice<'timestamp> =
     
@@ -57,7 +58,7 @@ module Sysex =
         let responses =
           [|
               for i in inputPorts do
-                use scope = withInputAndOutput i o
+                use _scope = withInputAndOutput i o
                 let buildResponse sysexData = DetectedDevice(sysexData, i, o)
                 let response = helpGetSysex 10 sysexInputTimeout sysexMatcher buildResponse i
                 yield i,o,response

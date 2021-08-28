@@ -18,7 +18,7 @@ type MidiChannelState<'timestamp> =
   val seenControllers         : HashSet<byte>
   val controllers             : byte array
   val activeNotes             : HashSet<byte>
-  val notes                   : (byte * int) array
+  val notes                   : (byte * 'timestamp) array
   //val mutable modWheel        : byte
   val mutable pitchBend       : int16
   val mutable channelPressure : byte

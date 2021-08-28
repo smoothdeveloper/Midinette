@@ -1,4 +1,5 @@
 module Elektron.MonoMachine
+#nowarn "1178"
 open FSharp.UMX
 open System
 open Midi
@@ -74,7 +75,7 @@ with
 
 type Track = Track1 | Track2 | Track3 | Track4 | Track5 | Track6
 with
-  static member FromByte b =
+  static member FromByte (b:byte_7bits) =
     match UMX.untag_byte_7bits b with
     | 0x0uy -> Track1
     | 0x1uy -> Track2
@@ -188,7 +189,7 @@ type MonoMachineKit (data: sysex_data) =
       |> dataToByte
     //else [||]
   member x.Name =
-    x.unpacked |> SysexBufferEdit.getSlice 0 11 |> unbox |> ASCIIEncoding.ASCII.GetString
+    x.unpacked |> SysexBufferEdit.getSlice 0 11 |> ASCIIEncoding.ASCII.GetString
   member x.Levels =
     x.unpacked |> SysexBufferEdit.getSlice 0xb 6
   member x.Parameters =
@@ -370,7 +371,7 @@ type MonoMachine<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
 #endif
   let performSysExRequest (requestMessage: MonoMachineSysexRequests) =
     match requestMessage.ResponseMessageId with
-    | Some id ->
+    | Some _id ->
       let task = 
         helpGetMonomachineSysex 5 (TimeSpan.FromMilliseconds(5000.)) requestMessage inPort
         |> Async.StartAsTask
@@ -643,8 +644,8 @@ type MonoMachineControlChange =
 type MonoMachineEvent =
 | TrackLevel of Track * value: byte
 | TrackParameter of Track * MonoMachineParameter * value: byte
-| TrackTrigger of Track * note: byte * velocity: byte
-| TrackRelease of Track * note: byte * velocity: byte
+| TrackTrigger of Track * note: byte_7bits * velocity: byte_7bits
+| TrackRelease of Track * note: byte_7bits * velocity: byte_7bits
 | PatternChanged of PatternLocator
 | LFOSetting of Track * LFOParameter * byte
 | LFOEvent of Track * OneToThree * LFOEvent 
@@ -672,7 +673,7 @@ type MonoMachineEventListener<'timestamp>
   //and 'timestamp : (static member (+) : ^timestamp -> b: ^timestamp -> ^timestamp)
   (getNow: unit -> 'timestamp, mm: MonoMachine<'timestamp>) =
     
-  let settings = mm.CurrentGlobalSettings
+  let _settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
   let midiRealtimeState = Midi.Registers.MidiRealtimeState()
@@ -682,12 +683,12 @@ type MonoMachineEventListener<'timestamp>
   let nrpnRegisters =
         Array.init 16 (
                        fun i ->
-                          let register = new NRPNChannelRegister<_>(byte i, (fun timestamp -> false) ,getNow())
+                          let register = new NRPNChannelRegister<_>(UMX.tag_byte_7bits (byte i), (fun _timestamp -> false) ,getNow())
                           register.NRPN.Add(fun n -> event.Trigger({ Timestamp = getNow(); Message = UnknownNRPN (snd n) }))
                           register
                        )
 
-  let midiChannelStates = 
+  let _midiChannelStates = 
     let tracks =
       [| 
         Track1
@@ -705,7 +706,9 @@ type MonoMachineEventListener<'timestamp>
   //let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
   
   let onChannelMessage (midiEvent: MidiEvent<_>) =
-    nrpnRegisters.[int midiEvent.Message.Channel.Value].NoticeMessage(midiEvent)
+    // notice message on nrpn register
+    do let m = midiEvent.Message in nrpnRegisters.[int m.Channel.Value].NoticeMessage(midiEvent)
+
     // hijack settings as hardware doesn't send proper sysex...
     let settings = GlobalSettings.Default //settings |> Option.defaultValue 
     let message = midiEvent.Message
@@ -714,15 +717,15 @@ type MonoMachineEventListener<'timestamp>
     if midiChannelIsTrack then
       let track = Track.FromByte (messageChannel - settings.midiChannel)
       match message with
-      | NoteOn (_, note, velocity)  -> TrackTrigger(track, UMX.tag note, velocity)
-      | NoteOff (_, note, velocity) -> TrackRelease(track, UMX.tag note, velocity)
+      | NoteOn (_, note, velocity)  -> TrackTrigger(track, UMX.tag_byte_7bits note, UMX.tag_byte_7bits velocity)
+      | NoteOff (_, note, velocity) -> TrackRelease(track, UMX.tag_byte_7bits note, UMX.tag_byte_7bits velocity)
       | ProgramChange {program = program} ->
         let locator = PatternLocator.FromByte program
         PatternSelected(locator)
-      | CC None 99uy ee
-      | CC None 98uy ee
-      | CC None 06uy ee
-      | CC None 38uy ee ->
+      | CC None 99uy _ee
+      | CC None 98uy _ee
+      | CC None 06uy _ee
+      | CC None 38uy _ee ->
         
         Unknown message
       //| CC {control} ->

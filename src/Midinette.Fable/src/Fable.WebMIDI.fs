@@ -88,7 +88,7 @@ type IMIDIAccess =
 module internal Intern =
 
     [<Emit("navigator.requestMIDIAccess($0)")>]
-    let requestAccess (options: obj) : Promise<IMIDIAccess> = jsNative
+    let requestAccess (_options: obj) : Promise<IMIDIAccess> = jsNative
 
 module Map =
     let toList (m: JS.Map<'a,'b>): ('a*'b) list =

@@ -7,7 +7,7 @@ open Midinette.Fable
 open Fable.Core.Testing
 
 [<Global>]
-let it (msg: string) (f: unit->unit): unit = jsNative
+let it (_msg: string) (_f: unit->unit): unit = jsNative
 let add a b = a + b
 it "Adding works" <| fun () ->
     let expected = 3

@@ -1,4 +1,5 @@
 namespace Elektron.MachineDrum
+#nowarn "1178"
 open Elektron
 open Elektron.Platform
 open Elektron.Platform.SilverMachines
@@ -118,13 +119,31 @@ module Sysex =
     module Kit =
       let [<Literal>] version  = 0x4uy
       let [<Literal>] revision = 0x1uy
+    module Global =
+      let [<Literal>] version  = 0x6uy
+      let [<Literal>] revision = 0x1uy
+    module Pattern =
+      let [<Literal>] version  = 0x3uy
+      let [<Literal>] revision = 0x1uy
+    module Song =
+      let [<Literal>] version  = 0x2uy
+      let [<Literal>] revision = 0x2uy
       
   let makeMachineDrumSysexMessageWithChecksum messageType (messageBluePart: data) : sysex_data =
     let version, revision =
       match messageType with
-      | MachineDrumSysexMessageId.Kit -> Versions.Kit.version, Versions.Kit.revision
-    
+      | MachineDrumSysexMessageId.Kit     -> Versions.Kit.version, Versions.Kit.revision
+      | MachineDrumSysexMessageId.Global  -> Versions.Global.version, Versions.Global.revision
+      | MachineDrumSysexMessageId.Pattern -> Versions.Pattern.version, Versions.Pattern.revision
+      | MachineDrumSysexMessageId.Song -> Versions.Song.version, Versions.Song.revision
+      | _ -> failwithf $"{messageType} unknown"
     let sysexEnd = 0xf7uy
+    let word14To2bytes v = 
+      [|
+        v &&& 0b0011111110000000
+        v &&& 0b0000000001111111
+      |]
+      |> Array.map byte
     let checksumBytes = 
       checkSum messageBluePart
       |> word14To2bytes
@@ -172,7 +191,7 @@ with
   static member Trig = SDULFOType 1uy
   static member Hold = SDULFOType 2uy
 
-  static member FromByte b =
+  static member FromByte (b: byte_7bits) =
     match UMX.untag_byte_7bits b with
     | 0uy -> LFOType.Free
     | 1uy -> LFOType.Trig
@@ -395,7 +414,7 @@ with
   static member effectsParameters = MDTrackParameter.all.[8..15]
   static member routingParameters = MDTrackParameter.all.[16..23]
     
-  static member fromCCOffset offset =
+  static member fromCCOffset (offset: byte_7bits) =
     match UMX.untag_byte_7bits offset with
     | 00uy -> MachineParameter1  | 01uy -> MachineParameter2 | 02uy -> MachineParameter3 | 03uy -> MachineParameter4  
     | 04uy -> MachineParameter5  | 05uy -> MachineParameter6 | 06uy -> MachineParameter7 | 07uy -> MachineParameter8  
@@ -447,7 +466,7 @@ with
     
     
     
-type MDMachineSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>, trackIndex: int, machineType: MDMachineType) =
+type MDMachineSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>, _trackIndex: int, _machineType: MDMachineType) =
   let baseAddress = Sysex.Offsets.Kit.trackParameters
   let getAt a = bytes.Get (a + baseAddress) 
   let setAt address = bytes.Set (address + baseAddress)
@@ -511,7 +530,7 @@ type LFOShape =
 | ExponentialDecay
 | Random
 with
-  static member FromByte b =
+  static member FromByte (b: byte_7bits) =
     match UMX.untag_byte_7bits b with
     | 0uy -> Triangle
     | 1uy -> Saw
@@ -751,14 +770,14 @@ type ReverbSettings(bytes: NonZeroIndexedArraySegment<byte_7bits>) =
 type TrigGroups(bytes: bytes) =
   member x.GetTrig track =
     let index = int (Track.trackValue track)
-    let value = UMX.untag_sysex bytes.[index]
+    let value = bytes.[index]
     if value < 16uy then
       Some (Track.trackForValue (UMX.tag_byte_7bits value))
     else
       None
   member x.GetMute track =
     let index = int (Track.trackValue track)
-    let value = UMX.untag_sysex bytes.[index + 16]
+    let value = bytes.[index + 16]
     if value < 16uy then
       Some (Track.trackForValue (UMX.tag_byte_7bits value))
     else
@@ -803,7 +822,7 @@ type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     |> dataToByte
   member x.Position = bytes.Get Sysex.Offsets.Kit.kit
   member x.Name     
-    with get ()         = bytes.GetSlice 0x0a 16 |> unbox |> ASCIIEncoding.Default.GetString
+    with get ()         = bytes.GetSlice 0x0a 16 |> UMX.untag_byte_7bits |> ASCIIEncoding.Default.GetString
     and set (v: string) = bytes.Blit 0x0a 16 (unbox (ASCIIEncoding.Default.GetBytes v))
   
   member x.ReverbSettings     = ReverbSettings     <| bytes.SubSegment Sysex.Offsets.Kit.reverb 8
@@ -875,7 +894,7 @@ type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     
   static member fromSysex sysex =
     Sysex.validateSysexShape sysex
-    let segment = ArraySegment(UMX.to_byte_7bits sysex, Sysex.Offsets.Kit.kit, sysex.Length - 14)
+    let segment = ArraySegment(unbox sysex, Sysex.Offsets.Kit.kit, sysex.Length - 14)
     let segment = NonZeroIndexedArraySegment(Sysex.Offsets.Kit.kit, segment)
     MDKit segment
     
@@ -912,7 +931,7 @@ type MDPattern private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     else
       baseTrigs
   member x.TempoMultiplier  =
-    match UMX.untag_byte_7bits (bytes.Get 0xb3) with
+    match UMX.untag_sysex (bytes.Get 0xb3) with
     | 0uy -> One
     | 1uy -> Two
     | 2uy -> ThreeOverFour
@@ -928,7 +947,7 @@ type MDPattern private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
     | _ -> false
   
   static member fromSysex (sysex: sysex_data) =
-    let segment = ArraySegment(UMX.to_byte_7bits sysex, Sysex.Offsets.Pattern.pattern, sysex.Length - 14)
+    let segment = ArraySegment(unbox sysex, Sysex.Offsets.Pattern.pattern, sysex.Length - 14)
     let segment = NonZeroIndexedArraySegment(Sysex.Offsets.Pattern.pattern ,segment)
     MDPattern segment
         
@@ -1001,7 +1020,7 @@ type KeyMapStructure(bytes: byte array) =
     |> Array.indexed
     |> Array.map(fun (note, value) -> NoteTriggerType (byte note, getTriggerType value))
   
-  let triggerPerNoteLookup =
+  let _triggerPerNoteLookup =
     bytes
     |> Array.indexed
     |> Array.map (fun (note, value) -> byte note,getTriggerType value)
@@ -1070,7 +1089,7 @@ type GlobalSettings = {
   // Trig mode for keymap
 }
 with 
-  static member ToSysex globals =
+  static member ToSysex _globals =
     [||]
   static member fromSysex (bytes: sysex_data) =
     Sysex.validateSysexShape bytes
@@ -1274,7 +1293,7 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
       let! sysx = getSysexAsync
       match sysx with
       | Choice1Of2 sysx -> return sysx
-      | Choice2Of2 exn -> 
+      | Choice2Of2 _exn -> 
         printfn "oops"
         return None
     }
@@ -1311,19 +1330,19 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
           match note with
           | None      -> None
           | Some note -> 
-              let note = note
-              let velocity = velocity
+              let note = byte note
+              let velocity = byte velocity
               if isOn then
                   Some (MidiOutputData.Message (MidiMessage.NoteOn channel note velocity))
               else
                   Some (MidiOutputData.Message (MidiMessage.NoteOff channel note velocity))
-      let makeCC track parameter value =
-        let cc      = UMX.untag_byte_7bits <| MDTrackParameter.GetCCForTrack parameter track
-        let channel = UMX.untag_byte_7bits <| Track.midiBaseChannelOffset track + channel
-        let value   = UMX.untag_byte_7bits <| value
+      let makeCC track parameter (value: byte_7bits) =
+        let cc      = UMX.untag_byte_7bits ( MDTrackParameter.GetCCForTrack parameter track)
+        let channel = UMX.untag_byte_7bits ( Track.midiBaseChannelOffset track + channel   )
+        let value   = UMX.untag_byte_7bits ( value                                         )
         MidiMessage.CC channel cc value
         |> MidiOutputData.Message
-      let makeProgramChange program =
+      let makeProgramChange (program: byte_7bits) =
         let program = UMX.untag_byte_7bits program
         MidiMessage.ProgramChange channel program
         |> MidiOutputData.Message
@@ -1331,15 +1350,15 @@ type MachineDrum<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
       let none = Array.empty
       let some = Array.singleton
       match mdEvent with
-      | TrackTrigger(track, velocity)            -> makeNote note velocity true |> Option.get |> some
-      | TrackRelease(track)                      -> makeNote note (UMX.tag_byte_7bits 0uy) false |> Option.get |> some
-      | TrackLevel(track, level)                 -> none
-      | TrackParameter(track, parameter, value)  -> makeCC track parameter value |> some
-      | PatternChanged pattern                   -> none
-      | Unknown message                          -> message    |> MidiOutputData.Message |> some
-      | Sysex data                               -> data       |> MidiOutputData.Sysex   |> some
-      | MachineDrumSysex sysex                   -> none
-      | KitChanged kit                           -> makeProgramChange kit |> some
+      | TrackTrigger(_track, velocity)          -> makeNote note velocity true |> Option.get |> some
+      | TrackRelease(_track)                    -> makeNote note (UMX.tag_byte_7bits 0uy) false |> Option.get |> some
+      | TrackLevel(_track, _level)              -> none
+      | TrackParameter(track, parameter, value) -> makeCC track parameter value |> some
+      | PatternChanged _pattern                 -> none
+      | Unknown message                         -> message    |> MidiOutputData.Message |> some
+      | Sysex data                              -> data       |> MidiOutputData.Sysex   |> some
+      | MachineDrumSysex _sysex                 -> none
+      | KitChanged kit                          -> makeProgramChange kit |> some
       | _ -> none
           
 
@@ -1411,7 +1430,7 @@ module MachineDrumEventParser =
     message.MessageType = MidiMessageType.ControllerChange 
     && isMachineDrumChannel midiBaseChannel message.Channel.Value
     && (message.Data1 >= 16uy && message.Data1 <= 119uy)
-  let trackOffset cc =
+  let trackOffset (cc: byte_7bits) =
     let cc = UMX.untag_byte_7bits cc
     UMX.tag_byte_7bits(
       if   cc <= 39uy  then 0uy

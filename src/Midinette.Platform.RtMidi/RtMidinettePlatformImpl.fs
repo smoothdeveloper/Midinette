@@ -1,5 +1,5 @@
 ﻿namespace Midinette.Platform.RtMidi
-
+#nowarn "1178"
 open System.Reflection
 open Midinette.Platform
 open Midi
@@ -10,7 +10,7 @@ module Impl =
         let rtoutport = f.GetValue port
         let sendmethod = rtoutport.GetType().GetMethod "SendMessage"
         let paramters = box bytes
-        let result = sendmethod.Invoke(rtoutport, Array.singleton paramters) :?> bool        
+        let _result = sendmethod.Invoke(rtoutport, Array.singleton paramters) :?> bool        
         ()
         
 open Impl
@@ -36,7 +36,7 @@ with
     interface IMidiInput<int64> with
         
         member x.Close () = x.inPort.Close()
-        member x.Open bufferSize = x.inPort.Open() |> ignore
+        member x.Open _bufferSize = x.inPort.Open() |> ignore
         member x.DeviceInfo = x.info :> _
         [<CLIEvent>] member x.Error = x.inEvents.error.Publish
         [<CLIEvent>] member x.ChannelMessageReceived = x.inEvents.channelMessage.Publish
@@ -48,11 +48,11 @@ type RtMidiOut<'timestamp> = { outPort: RtMidi.Core.Devices.IMidiOutputDevice; i
 with
     interface IMidiOutput<'timestamp> with
         member x.DeviceInfo = x.info :> _
-        member x.Open bufferSize latency = x.outPort.Open() |> ignore
+        member x.Open _bufferSize _latency = x.outPort.Open() |> ignore
         member x.Close () = x.outPort.Close()
-        member x.WriteSysex timestamp data = rtMidiOut data x.outPort
-        member x.WriteMessage timestamp message = rtMidiOut (toBytes message) x.outPort 
-        member x.WriteMessages timestamp messages =
+        member x.WriteSysex _timestamp data = rtMidiOut data x.outPort
+        member x.WriteMessage _timestamp message = rtMidiOut (toBytes message) x.outPort 
+        member x.WriteMessages _timestamp messages =
             let bytes =
                 Array.init
                     (messages.Length * 3)
@@ -67,7 +67,7 @@ with
             rtMidiOut bytes x.outPort 
 
 type RtMidiMidinettePlatformImpl() as this =
-    let rtmidi = RtMidi.Core.MidiDeviceManager.Default
+    let _rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
     //let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
