@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="ByteStreamTests.fs" />
     <Compile Include="MidirTests.fs" />
+    <Compile Include="LoopbackCoverageTests.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::os::raw::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
@@ -152,15 +153,31 @@ pub unsafe extern "C" fn mmidir_list_ports(direction: i32, buf: *mut u8, cap: us
 
 pub struct InputHandle {
     conn: Option<MidiInputConnection<()>>,
+    /// `true` while the managed side may be called; cleared (under the lock) by close.
+    alive: Arc<Mutex<bool>>,
 }
 
 struct CallbackTarget {
     cb: InputCallback,
     user_data: usize,
+    alive: Arc<Mutex<bool>>,
+}
+
+fn lock_ignore_poison<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    match m.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    }
 }
 
 fn make_callback(target: CallbackTarget) -> impl FnMut(u64, &[u8], &mut ()) + Send + 'static {
     move |ts, data, _| {
+        // the managed callback only runs while holding `alive`: once close has cleared it,
+        // an in-flight or late OS callback can never reach a freed GCHandle.
+        let alive = lock_ignore_poison(&target.alive);
+        if !*alive {
+            return;
+        }
         let cb = target.cb;
         let ud = target.user_data as *mut c_void;
         let _ = catch_unwind(AssertUnwindSafe(|| cb(ud, ts, data.as_ptr(), data.len())));
@@ -209,10 +226,11 @@ pub unsafe extern "C" fn mmidir_input_open(
             set_error(format!("input port not found: {id}"));
             return MMIDIR_ERR_NOT_FOUND;
         };
-        let target = CallbackTarget { cb, user_data: user_data as usize };
+        let alive = Arc::new(Mutex::new(true));
+        let target = CallbackTarget { cb, user_data: user_data as usize, alive: alive.clone() };
         match mi.connect(&port, "midinette-in", make_callback(target), ()) {
             Ok(conn) => {
-                *out = Box::into_raw(Box::new(InputHandle { conn: Some(conn) }));
+                *out = Box::into_raw(Box::new(InputHandle { conn: Some(conn), alive }));
                 MMIDIR_OK
             }
             Err(e) => {
@@ -251,10 +269,11 @@ pub unsafe extern "C" fn mmidir_input_create_virtual(
                     return MMIDIR_ERR;
                 }
             };
-            let target = CallbackTarget { cb, user_data: user_data as usize };
+            let alive = Arc::new(Mutex::new(true));
+        let target = CallbackTarget { cb, user_data: user_data as usize, alive: alive.clone() };
             match mi.create_virtual(name, make_callback(target), ()) {
                 Ok(conn) => {
-                    *out = Box::into_raw(Box::new(InputHandle { conn: Some(conn) }));
+                    *out = Box::into_raw(Box::new(InputHandle { conn: Some(conn), alive }));
                     MMIDIR_OK
                 }
                 Err(e) => {
@@ -280,9 +299,14 @@ pub unsafe extern "C" fn mmidir_input_close(handle: *mut InputHandle) -> i32 {
             return MMIDIR_OK;
         }
         let mut h = Box::from_raw(handle);
-        if let Some(conn) = h.conn.take() {
-            let _ = conn.close();
-        }
+        // 1. waits for an in-flight callback, then blocks every later one
+        *lock_ignore_poison(&h.alive) = false;
+        // 2. drop instead of `close()`: midir's CoreMIDI `close()` takes the handler's
+        //    user_data while the port is still connected, and a packet arriving in that
+        //    window panics (`user_data.as_mut().unwrap()`) on CoreMIDI's thread, outside
+        //    any catch_unwind, aborting the process. Dropping disposes the port/endpoint
+        //    with user_data left in place (ALSA/WinMM drop == close).
+        drop(h.conn.take());
         MMIDIR_OK
     })
 }
@@ -414,20 +438,128 @@ pub unsafe extern "C" fn mmidir_output_send(
     })
 }
 
-/// CoreMIDI's MIDIPacket length is a UInt16: midir builds one packet per send, and a
-/// message of 65536 bytes or more is silently dropped. CoreMIDI accepts sysex spanning
-/// several packets, so large sysex is sent in pieces there. Other backends get it whole
-/// (WinMM requires sysex to start with F0 per call; ALSA's encoder handles any size).
+/// CoreMIDI packet framing (midir builds one MIDIPacket per `send`):
+/// - MIDIPacket length is a UInt16, a message of 65536 bytes or more is silently dropped:
+///   large sysex is sent in 16 KB pieces (CoreMIDI accepts sysex spanning packets).
+/// - midir's CoreMIDI *input* treats everything after an F0 up to the packet end as sysex
+///   and waits for a packet ending in F7, so a sysex followed by other bytes in the same
+///   packet would swallow them: each sysex goes out in its own packet(s).
+/// - CoreMIDI (seen on virtual endpoints) truncates a sysex packet at an interleaved
+///   realtime byte and drops the data after it: realtime bytes inside a sysex are sent
+///   in their own packet just before it (the order a byte-stream parser reports them).
+/// - midir's CoreMIDI input stops at a data byte where it expects a status byte (no
+///   running status), so running status is expanded to full messages here.
+/// Other backends get the bytes unchanged (WinMM requires sysex to start with F0 per call;
+/// ALSA's encoder handles any size and running status).
 #[cfg(target_os = "macos")]
 fn send_chunked(conn: &mut MidiOutputConnection, bytes: &[u8]) -> Result<(), midir::SendError> {
-    const CHUNK: usize = 16 * 1024;
-    if bytes.len() <= CHUNK {
-        return conn.send(bytes);
-    }
-    for piece in bytes.chunks(CHUNK) {
-        conn.send(piece)?;
+    for packet in coremidi_packets(bytes) {
+        conn.send(&packet)?;
     }
     Ok(())
+}
+
+/// Splits/normalises a byte stream into CoreMIDI-friendly packets (see `send_chunked`).
+/// Pure, so it is unit tested on every OS.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn coremidi_packets(bytes: &[u8]) -> Vec<Vec<u8>> {
+    const CHUNK: usize = 16 * 1024;
+    fn data_len(status: u8) -> usize {
+        match status {
+            0x80..=0xbf | 0xe0..=0xef => 2,
+            0xc0..=0xdf => 1,
+            0xf1 | 0xf3 => 1,
+            0xf2 => 2,
+            _ => 0,
+        }
+    }
+    let mut packets: Vec<Vec<u8>> = Vec::new();
+    let mut run: Vec<u8> = Vec::new();
+    let mut running: u8 = 0;
+    let mut pending = 0usize; // data bytes still expected for the current message
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == 0xf0 {
+            if !run.is_empty() {
+                packets.push(std::mem::take(&mut run));
+            }
+            let end = bytes[i..].iter().position(|&x| x == 0xf7).map(|p| i + p + 1).unwrap_or(bytes.len());
+            // realtime bytes interleaved in the sysex are hoisted in front of it
+            let (rt, body): (Vec<u8>, Vec<u8>) = bytes[i..end].iter().partition(|&&x| x >= 0xf8);
+            if !rt.is_empty() {
+                packets.push(rt);
+            }
+            for piece in body.chunks(CHUNK) {
+                packets.push(piece.to_vec());
+            }
+            running = 0;
+            pending = 0;
+            i = end;
+            continue;
+        }
+        if b >= 0xf8 {
+            run.push(b); // realtime: anywhere, does not touch running status
+        } else if b >= 0x80 {
+            pending = data_len(b);
+            running = if b < 0xf0 { b } else { 0 };
+            run.push(b);
+        } else if pending > 0 {
+            run.push(b);
+            pending -= 1;
+        } else if running != 0 {
+            // running status: re-emit the status byte
+            run.push(running);
+            run.push(b);
+            pending = data_len(running) - 1;
+        } else {
+            run.push(b); // orphan data byte: pass through unchanged
+        }
+        i += 1;
+    }
+    if !run.is_empty() {
+        packets.push(run);
+    }
+    packets
+}
+
+#[cfg(test)]
+mod tests {
+    use super::coremidi_packets;
+
+    #[test]
+    fn sysex_gets_its_own_packet() {
+        let p = coremidi_packets(&[0x90, 60, 100, 0xf0, 1, 2, 0xf7, 0x80, 60, 0]);
+        assert_eq!(p, vec![vec![0x90, 60, 100], vec![0xf0, 1, 2, 0xf7], vec![0x80, 60, 0]]);
+    }
+
+    #[test]
+    fn running_status_is_expanded() {
+        let p = coremidi_packets(&[0x90, 60, 100, 61, 101, 0xf8, 62, 102, 0xc0, 1, 2]);
+        assert_eq!(p, vec![vec![0x90, 60, 100, 0x90, 61, 101, 0xf8, 0x90, 62, 102, 0xc0, 1, 0xc0, 2]]);
+    }
+
+    #[test]
+    fn realtime_inside_sysex_is_hoisted() {
+        let p = coremidi_packets(&[0xf0, 0x7d, 1, 0xf8, 2, 0xfe, 3, 0xf7]);
+        assert_eq!(p, vec![vec![0xf8, 0xfe], vec![0xf0, 0x7d, 1, 2, 3, 0xf7]]);
+    }
+
+    #[test]
+    fn big_sysex_is_chunked() {
+        let mut s = vec![0xf0u8];
+        s.extend(std::iter::repeat(1u8).take(70_000));
+        s.push(0xf7);
+        let p = coremidi_packets(&s);
+        assert!(p.iter().all(|x| x.len() <= 16 * 1024));
+        assert_eq!(p.concat(), s);
+    }
+
+    #[test]
+    fn system_common_cancels_running_status() {
+        let p = coremidi_packets(&[0x90, 60, 100, 0xf3, 5, 61]);
+        assert_eq!(p, vec![vec![0x90, 60, 100, 0xf3, 5, 61]]);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
