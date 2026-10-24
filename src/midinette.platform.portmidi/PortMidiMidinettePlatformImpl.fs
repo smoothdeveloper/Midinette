@@ -1,16 +1,16 @@
 namespace midinette.platform.portmidi
 #nowarn "1178"
 
-open Midi
+open midi
 open midinette.platform
 
 
 module Impl =
     let toMidiEvent (e :PortMidi.MidiEvent) = 
       let m = e.Message in
-      MidiEvent<int>(Midi.MidiMessage.FromWord m.Word, e.Timestamp)
-    //let toMidiMessage   (m: PortMidi.MidiMessage) = Midi.MidiMessage.FromWord m.Word
-    let fromMidiMessage (m: Midi.MidiMessage)     = PortMidi.MidiMessage.FromWord m.Word
+      MidiEvent<int>(midi.MidiMessage.FromWord m.Word, e.Timestamp)
+    //let toMidiMessage   (m: PortMidi.MidiMessage) = midi.MidiMessage.FromWord m.Word
+    let fromMidiMessage (m: midi.MidiMessage)     = PortMidi.MidiMessage.FromWord m.Word
     let toTaggedSysexEvent (h:IEvent<Handler<byte array>, byte array>) : IEvent<Handler<sysex_data>, sysex_data> = unbox h
         
 open Impl

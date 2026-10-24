@@ -1,4 +1,4 @@
-namespace Midi
+namespace midi
 open FSharp.UMX
 type [<Measure>] private bits7'
 type [<Measure>] private bits8'

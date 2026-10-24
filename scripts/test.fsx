@@ -6,13 +6,13 @@
 #r @"../build/Debug/AnyCPU/netstandard2.1/midinette.platform.rtmidi.dll"
 #load @"../../ElektronControl/ToolLib/PrettyPrint.fs"
 open Elektron.MachineDrum
-open Midi
+open midi
 open RtMidi.Core.Devices
 open RtMidi.Core.Devices.Nrpn
 open Elektron
 open Elektron.MonoMachine
 open System
-Midi.Tuning.Internals.SCLParser.parse (System.IO.StringReader """! /Users/Shared/Scala/b6b7v3.scl
+midi.Tuning.Internals.SCLParser.parse (System.IO.StringReader """! /Users/Shared/Scala/b6b7v3.scl
 !
  b6b7 lin scale middle 69 A4 440 Bernard Durr 
  12
@@ -151,8 +151,8 @@ kit.unpacked.[0xb..0xb+6]
 
 
 
-monomachine.MidiInPort.WriteMessage 0L (Midi.MidiMessage.NoteOn 0x00uy 0x64uy 100uy)
-monomachine.MidiInPort.WriteMessage 0L (Midi.MidiMessage.NoteOff 0x00uy 0x64uy 100uy)
+monomachine.MidiInPort.WriteMessage 0L (midi.MidiMessage.NoteOn 0x00uy 0x64uy 100uy)
+monomachine.MidiInPort.WriteMessage 0L (midi.MidiMessage.NoteOff 0x00uy 0x64uy 100uy)
 monomachine.DumpPattern 0uy
 let globalsysex =
   """

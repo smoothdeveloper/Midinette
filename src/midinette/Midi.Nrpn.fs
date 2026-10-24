@@ -1,6 +1,6 @@
-namespace Midi
+namespace midi
 
-open Midi.MessageMatching
+open midi.MessageMatching
 
 module Nrpn =
   let makeNRPN1 hi value =
@@ -114,7 +114,7 @@ module Nrpn =
       // TODODODODODO
       (*
     do
-      subscription <- Midi.Runtime.midiCallback.Publish.Subscribe(fun timestamp -> 
+      subscription <- midi.Runtime.midiCallback.Publish.Subscribe(fun timestamp -> 
         clearIfExpired timestamp
         ()
       )*)

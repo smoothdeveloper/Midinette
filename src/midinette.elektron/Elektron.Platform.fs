@@ -1,6 +1,6 @@
 module Elektron.Platform
 open Elektron
-open Midi
+open midi
 open System
 open System.Collections.Generic
 open FSharp.UMX

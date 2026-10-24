@@ -7,7 +7,7 @@ open System.IO
 open System.Text
 open Expecto
 open midinette.sysex
-open Midi
+open midi
 open FSharp.UMX
 let sysexFiles =
     let dir = DirectoryInfo(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "data", "machinedrum"))

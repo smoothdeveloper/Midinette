@@ -8,7 +8,7 @@ Midinette is a set of F# MIDI tools. It covers messages, sysex, registers and de
 
 | Path | What |
 | --- | --- |
-| `src/midinette` | Core: `MidiMessage`, sysex helpers, `Midi.ByteStream` raw-byte parser, `IMidiPlatform` / `IVirtualMidiPlatform` (`netstandard2.0;net10.0`) |
+| `src/midinette` | Core: `MidiMessage`, sysex helpers, `midi.ByteStream` raw-byte parser, `IMidiPlatform` / `IVirtualMidiPlatform` (`netstandard2.0;net10.0`) |
 | `src/midinette.platform.midir` | Port backend on midir via a small Rust cdylib (`net10.0`) |
 | `native/midinette-midir-ffi` | The Rust C-ABI shim over midir 0.11 |
 | `src/midinette.elektron`, `src/midinette.waldorf` | Device specifics |
@@ -18,7 +18,7 @@ Midinette is a set of F# MIDI tools. It covers messages, sysex, registers and de
 ## Midir backend
 
 ```fsharp
-open Midi
+open midi
 open midinette.platform
 open midinette.platform.midir
 

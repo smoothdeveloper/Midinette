@@ -7,7 +7,7 @@ open System.Text
 open System.Threading
 open System
 open System.Diagnostics
-open Midi
+open midi
 open midinette.platform
 open midinette.sysex
 
@@ -803,7 +803,7 @@ module Fooppp =
       yield! checksum data
       yield! encode14bits (data.Length + 2 + 2)
     |]
-open Midi
+open midi
 
 
 type MDKit private (bytes: NonZeroIndexedArraySegment<byte_7bits>) =
@@ -1164,7 +1164,7 @@ with
       | InitSynthesisAndEffects           -> 0x1uy
       | InitSynthesisAndEffectsAndRouting -> 0x2uy
     )
-open Midi
+open midi
 type MachineDrumSysexRequests =
 | DumpGlobalSettings of globalSettingIndex: byte_7bits
 | DumpKit            of kit: byte_7bits

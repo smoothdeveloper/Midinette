@@ -1,5 +1,5 @@
 namespace midinette.platform
-open Midi
+open midi
 
 type IDeviceInfo =
   abstract member Name     : string

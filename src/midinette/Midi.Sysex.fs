@@ -1,7 +1,7 @@
 
 namespace midinette.sysex
 #nowarn "1178"
-open Midi
+open midi
 module Sysex =
   open System
   open System.Diagnostics

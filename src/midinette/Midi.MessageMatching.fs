@@ -1,4 +1,4 @@
-namespace Midi
+namespace midi
 
 module MessageMatching =
 

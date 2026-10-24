@@ -2,9 +2,9 @@
 #nowarn "1178"
 open System.Reflection
 open midinette.platform
-open Midi
+open midi
 module Impl =
-    let toBytes (message: Midi.MidiMessage) = [|message.Status;message.Data1;message.Data2|]
+    let toBytes (message: midi.MidiMessage) = [|message.Status;message.Data1;message.Data2|]
     let rtMidiOut bytes port =
         let f = port.GetType().GetField("_outputDevice", BindingFlags.NonPublic ||| BindingFlags.Instance)
         let rtoutport = f.GetValue port
@@ -14,16 +14,16 @@ module Impl =
         ()
         
 open Impl
-open Midi
+open midi
 open RtMidi.Core.Unmanaged.Devices
 open System.Diagnostics
     
 type InPortEvents<'timestamp> = {
   error : Event<string>  
-  channelMessage : Event<Midi.MidiEvent<'timestamp>>
-  systemMessage: Event<Midi.MidiEvent<'timestamp>>
+  channelMessage : Event<midi.MidiEvent<'timestamp>>
+  systemMessage: Event<midi.MidiEvent<'timestamp>>
   sysex: Event<sysex_data>
-  realtimeMessage: Event<Midi.MidiEvent<'timestamp>>
+  realtimeMessage: Event<midi.MidiEvent<'timestamp>>
 }
 
 type RtMidiInfo = { info: RtMidi.Core.Devices.Infos.IMidiDeviceInfo }
@@ -107,7 +107,7 @@ type RtMidiMidinettePlatformImpl() as this =
                       let inline toMidiEvent (bytes: byte array) (watch: Stopwatch) =
                         let timestamp = watch.ElapsedTicks
                         let message = MidiMessage.Encode bytes.[0] bytes.[1] bytes.[2]
-                        Midi.MidiEvent(message, timestamp)
+                        midi.MidiEvent(message, timestamp)
                       
                       let inline triggerMessageEvent (event1: Event<_>) platformNoticer =
                         let event = toMidiEvent bytes watch 

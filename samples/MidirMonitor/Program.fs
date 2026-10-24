@@ -6,7 +6,7 @@
 module MidirMonitor.Program
 open System
 open System.Threading
-open Midi
+open midi
 open midinette.platform
 open midinette.platform.midir
 

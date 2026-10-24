@@ -1,6 +1,6 @@
-module Midi.Registers
+module midi.Registers
 open midinette.platform
-open Midi
+open midi
 open System.Collections.Generic
 type MidiRealtimeState =
     val mutable started : bool
@@ -71,7 +71,7 @@ type ISysexInputState =
 
 
 module PlatformImplHelp =
-  open Midi.MidiMessageTypeIdentifaction
+  open midi.MidiMessageTypeIdentifaction
   let internal getMessageType message : MidiMessageType =
     if message <= 14 then (message &&& 240) else (message &&& 255)
     |> byte

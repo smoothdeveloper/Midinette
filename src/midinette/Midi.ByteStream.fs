@@ -1,8 +1,8 @@
 /// Byte-stream MIDI 1.0 parser for backends that deliver raw bytes (midir, WebMIDI, serial...).
 /// Handles running status, system realtime interleaved anywhere (incl. inside sysex),
 /// sysex split over several chunks, and cancels sysex on unexpected status bytes.
-module Midi.ByteStream
-open Midi
+module midi.ByteStream
+open midi
 
 [<RequireQualifiedAccess>]
 type ParsedMidi =

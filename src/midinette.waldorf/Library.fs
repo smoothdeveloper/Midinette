@@ -1,6 +1,6 @@
 ﻿namespace midinette.waldorf
 open FSharp.UMX
-open Midi
+open midi
 
 module Synthesizers =
     type [<Measure>] microwave1osversion

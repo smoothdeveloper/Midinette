@@ -7,7 +7,7 @@ open System.Diagnostics
 open System.IO
 open System.Threading
 open Expecto
-open Midi
+open midi
 open midinette.platform
 open midinette.platform.midir
 

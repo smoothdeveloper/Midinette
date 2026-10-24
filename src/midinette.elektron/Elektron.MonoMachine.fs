@@ -2,7 +2,7 @@ module Elektron.MonoMachine
 #nowarn "1178"
 open FSharp.UMX
 open System
-open Midi
+open midi
 
 open midinette.platform
 open Elektron.Platform
@@ -385,13 +385,13 @@ type MonoMachine<'timestamp>(inPort: IMidiInput<'timestamp>, outPort: IMidiOutpu
   member x.MidiInPort = outPort
 
   member x.ChangeLevel track level =
-    Midi.Nrpn.makeNRPN2 (00uy + track) 127uy level
+    midi.Nrpn.makeNRPN2 (00uy + track) 127uy level
     |> outPort.WriteMessages (nowTimestamp ())
   member x.ChangePitch track pitch =
-    Midi.Nrpn.makeNRPN1 (112uy + track) pitch
+    midi.Nrpn.makeNRPN1 (112uy + track) pitch
     |> outPort.WriteMessages (nowTimestamp ())
   member x.SendTrigs track (trigs: MonoMachineTrig) =
-    Midi.Nrpn.makeNRPN1 127uy ((track <<< 4) + (byte trigs))
+    midi.Nrpn.makeNRPN1 127uy ((track <<< 4) + (byte trigs))
     |> outPort.WriteMessages (nowTimestamp ())
   member x.DumpGlobal id =
     performSysExRequest (DumpGlobalSettings id)
@@ -650,7 +650,7 @@ type MonoMachineEvent =
 | LFOSetting of Track * LFOParameter * byte
 | LFOEvent of Track * OneToThree * LFOEvent 
 | Unknown of MidiMessage
-| UnknownNRPN of Midi.Nrpn.NRPNEvent
+| UnknownNRPN of midi.Nrpn.NRPNEvent
 | MonoMachineSysex of MonoMachineSysexResponse
 | Sysex of sysex_data
 | KitChanged of byte
@@ -665,8 +665,8 @@ type TimestampedMessage<'timestamp,'t> = {
   Message: 't
 }
 
-open Midi.MessageMatching
-open Midi.Nrpn
+open midi.MessageMatching
+open midi.Nrpn
 
 type MonoMachineEventListener<'timestamp>
   when 'timestamp : comparison
@@ -676,7 +676,7 @@ type MonoMachineEventListener<'timestamp>
   let _settings = mm.CurrentGlobalSettings
   //let settings = { GlobalSettings.midiBaseChannel = 0uy }
   let midiIn = mm.MidiOutPort
-  let midiRealtimeState = Midi.Registers.MidiRealtimeState()
+  let midiRealtimeState = midi.Registers.MidiRealtimeState()
   let event = new Event<_>()
 
   
@@ -700,7 +700,7 @@ type MonoMachineEventListener<'timestamp>
       |]
 
     tracks
-    |> Array.map (fun t -> t, Midi.Registers.MidiChannelState<_>())
+    |> Array.map (fun t -> t, midi.Registers.MidiChannelState<_>())
     |> dict
 
   //let makeMessage timestamp m = { Timestamp = timestamp; Message = m}
@@ -734,7 +734,7 @@ type MonoMachineEventListener<'timestamp>
       | _ ->
         Unknown message
 
-      (*| MessageMatching.CC {Midi.MessageMatching.ControlChange.channel = channel; control; value} ->
+      (*| MessageMatching.CC {midi.MessageMatching.ControlChange.channel = channel; control; value} ->
         match control with
         | 0x01uy -> JoystickUp   |> MonoMachineEvent.ControlChange
         | 0x02uy -> JoystickDown |> MonoMachineEvent.ControlChange

@@ -1,7 +1,7 @@
 module midinette.Tests
 open System.IO
 open Expecto
-open Midi
+open midi
 [<Tests>]
 let tests =
     testList "midinette"

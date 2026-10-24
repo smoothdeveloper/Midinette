@@ -1,4 +1,4 @@
-﻿module Midi.Tuning
+﻿module midi.Tuning
 open FSharp.UMX
 open midinette.platform
 
@@ -285,7 +285,7 @@ with
     | BulkTuningDumpRequest _ | BulkTuningDump _ | SingleNoteTuningChange _ -> ()
     | TuningProgramSelect _ ->
       //let rpn = 3
-      //let messages = Midi.Nrpn.makeNRPN2 1uy 1uy 1uy
+      //let messages = midi.Nrpn.makeNRPN2 1uy 1uy 1uy
       //midiOutput.WriteMessages (nowTimestamp()) messages
       ()
       (*

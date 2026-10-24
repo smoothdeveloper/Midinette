@@ -1,4 +1,4 @@
-namespace rec Midi
+namespace rec midi
 open FSharp.UMX
 open MidiMessageTypeIdentifaction
 [<Struct>]

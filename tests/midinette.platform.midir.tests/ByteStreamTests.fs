@@ -3,8 +3,8 @@ module midinette.platform.midir.tests.ByteStreamTests
 open System
 open System.IO
 open Expecto
-open Midi
-open Midi.ByteStream
+open midi
+open midi.ByteStream
 
 let parse (chunks: byte array list) =
   let p = MidiByteStreamParser()

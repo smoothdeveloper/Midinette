@@ -5,8 +5,8 @@ open System
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open System.Threading
-open Midi
-open Midi.ByteStream
+open midi
+open midi.ByteStream
 open midinette.platform
 
 type MidirException(message: string, code: int) =

@@ -1,5 +1,5 @@
 module midinette.Fable
-open Midi
+open midi
 open midinette.platform
 module WM = Fable.WebMIDI
 
@@ -36,7 +36,7 @@ type WebMIDIInputPortWrapper(webMidiInput: WM.IMIDIInput, onStateChange, onMidiI
     let _midiIn = this :> IMidiInput<double>
 
     webMidiInput.set_OnMidiMessage (fun mm ->
-      let midiMessage = Midi.MidiMessage.Encode mm.Data.[0] mm.Data.[1] mm.Data.[2]
+      let midiMessage = midi.MidiMessage.Encode mm.Data.[0] mm.Data.[1] mm.Data.[2]
 
       if midiMessage.IsChannelMessage then
         channelMessageReceived.Trigger(MidiEvent<_>(midiMessage, mm.ReceivedTime))
@@ -80,5 +80,5 @@ type WebMIDIOutputPortWrapper(webMidiOutput: WM.IMIDIOutput, device, onStateChan
         member x.WriteMessages timestamp messages =
             messages |> Array.iter (((x :> IMidiOutput<_>).WriteMessage) timestamp)
         member x.WriteSysex timestamp data =
-            webMidiOutput.SendAt (float timestamp) (Midi.UMX.untag_sysex data)
+            webMidiOutput.SendAt (float timestamp) (midi.UMX.untag_sysex data)
         member x.DeviceInfo = (DeviceInfo device) :> _
