@@ -8,16 +8,16 @@
         "fake"
       ]
     },
-    "paket": {
-      "version": "6.0.7",
-      "commands": [
-        "paket"
-      ]
-    },
     "sourcelink": {
       "version": "3.1.1",
       "commands": [
         "sourcelink"
+      ]
+    },
+    "paket": {
+      "version": "7.1.5",
+      "commands": [
+        "paket"
       ]
     }
   }

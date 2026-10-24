@@ -73,7 +73,7 @@ type MachineDrumSysexMessageId =
   | Song    = 0x69uy
   
 module Sysex =
-  let mdHeader =
+  let public mdHeader =
     [|
       0xf0uy
       0x00uy
@@ -83,8 +83,6 @@ module Sysex =
       0x00uy
     |] 
     |> UMX.tag_sysex_data
-  
-  
   
   module Sizes =
     let [<Literal>] kit = 0x4D1

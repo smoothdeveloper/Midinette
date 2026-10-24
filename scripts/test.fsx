@@ -1,10 +1,10 @@
-
-#load "../.paket/load/net472/fsnative.fsx"
-#load "../.paket/load/net472/RtMidi.Core.fsx"
-#r @"C:\dev\src\gitlab.com\gauthier\Midinette\build\Debug\AnyCPU\netstandard2.0\Midinette.dll"
-#r @"C:\dev\src\gitlab.com\gauthier\Midinette\build\Debug\AnyCPU\netstandard2.0\Midinette.Elektron.dll"
-#r @"C:\dev\src\gitlab.com\gauthier\Midinette\build\Debug\AnyCPU\netstandard2.0\Midinette.Platform.RtMidi.dll"
-#load @"C:\dev\src\gitlab.com\gauthier\ElektronControl\ToolLib\PrettyPrint.fs"
+#cd __SOURCE_DIRECTORY__
+#load "../.paket/load/net5.0/fsnative.fsx"
+#load "../.paket/load/net5.0/RtMidi.Core.fsx"
+#r @"../build/Debug/AnyCPU/netstandard2.0/Midinette.dll"
+#r @"../build/Debug/AnyCPU/netstandard2.0/Midinette.Elektron.dll"
+#r @"../build/Debug/AnyCPU/netstandard2.1/Midinette.Platform.RtMidi.dll"
+#load @"../../ElektronControl/ToolLib/PrettyPrint.fs"
 open Elektron.MachineDrum
 open Midi
 open RtMidi.Core.Devices
@@ -12,6 +12,25 @@ open RtMidi.Core.Devices.Nrpn
 open Elektron
 open Elektron.MonoMachine
 open System
+Midi.Tuning.Internals.SCLParser.parse (System.IO.StringReader """! /Users/Shared/Scala/b6b7v3.scl
+!
+ b6b7 lin scale middle 69 A4 440 Bernard Durr 
+ 12
+!
+ 77/72
+ 13/12
+ 7/6
+ 4/3
+ 49/36
+ 3/2
+ 14/9
+ 5/3
+ 7/4
+ 11/6
+ 35/18
+ 2/1
+
+""")
 
 open fsnative
 open fsnative.Internals
@@ -24,7 +43,7 @@ let libNames =
 let libPaths =
   match () with
   | Windows -> [|@"C:\dev\src\github.com\micdah\RtMidi.Core\RtMidi.Core\bin\Debug\net45\"|]
-
+  | OSX -> [|""|]
 let loader = LibraryLoader.withRuntimeLoader id
 let library = LibraryLoader.tryLoadLibrary libNames libPaths loader
 match library with

@@ -3,12 +3,11 @@ source ../fsnative/build/Debug/AnyCPU
 source https://nuget.org/api/v2
 storage: none
 github fsprojects/FSharp.UMX src/FSharp.UMX.fs
-nuget FSharp.Core = 5
+nuget FSharp.Core
 nuget fsnative
 nuget PortMidiSharp
-nuget RtMidi.Core = 1.0.59-alpha-3
-nuget dotnet-fable
-  
+nuget RtMidi.Core = 1.0.59-alpha-3 prerelease
+
 group Test
     source https://nuget.org/api/v2
     storage: none
@@ -21,7 +20,7 @@ group Fable
     source https://nuget.org/api/v2
     storage: none
 
-    nuget Thoth.Fetch prerelease
+#    nuget Thoth.Fetch prerelease
     nuget Fable.Core prerelease
     nuget Fable.Fetch prerelease
     nuget Fable.Promise prerelease

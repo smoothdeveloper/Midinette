@@ -70,22 +70,11 @@ type RtMidiMidinettePlatformImpl() as this =
     let _rtmidi = RtMidi.Core.MidiDeviceManager.Default
     let watch = Stopwatch.StartNew()
     let platformEvents = MidiPlatformTrigger()
-    //let platformEventsPublish = platformEvents :> IMidiPlatformEvents<_>
-    let iplatform =this :> IMidiPlatform<int64>
+    let iplatform = this :> IMidiPlatform<int64>
     member x.Trigger = platformEvents
-    //member x.Platform = x :> IMidiPlatformEvents<_>
     
     member x.Now = watch.ElapsedTicks
-    (*
-    interface IMidiPlatformEvents<int64> with
-        [<CLIEvent>] member x.Error                   = platformEventsPublish.Error                   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
-        [<CLIEvent>] member x.ChannelMessageReceived  = platformEventsPublish.ChannelMessageReceived  |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
-        [<CLIEvent>] member x.SystemMessageReceived   = platformEventsPublish.SystemMessageReceived   |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
-        [<CLIEvent>] member x.SysexReceived           = platformEventsPublish.SysexReceived           |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
-        [<CLIEvent>] member x.RealtimeMessageReceived = platformEventsPublish.RealtimeMessageReceived |> Event.map (fun (d,e) -> {info = d } :> IDeviceInfo, e)
-        
-    *)
-    
+
     interface IMidiPlatform<int64> with
     
         member x.InputDevices =
@@ -114,7 +103,6 @@ type RtMidiMidinettePlatformImpl() as this =
                     let sysexParts = ResizeArray()
                     
                     let rec onBytes (bytes: byte array) =
-                    
                       let status : MidiMessageType = LanguagePrimitives.EnumOfValue (bytes.[0])
                       let inline toMidiEvent (bytes: byte array) (watch: Stopwatch) =
                         let timestamp = watch.ElapsedTicks
@@ -125,6 +113,7 @@ type RtMidiMidinettePlatformImpl() as this =
                         let event = toMidiEvent bytes watch 
                         event1.Trigger event
                         platformNoticer ({info = device},event)
+                      
                       let inline pushSysexBytes endSysexIndex =
                         let sysexBytes = 
                           [|
@@ -136,8 +125,8 @@ type RtMidiMidinettePlatformImpl() as this =
                         platformEvents.NoticeSysex({info = device }, sysexBytes)
                         sysexParts.Clear()
                         
-                        
                       let inline getSysexEndIndex () = bytes |> Array.tryFindIndex (fun i -> i = byte MidiMessageType.SysExEnd)
+
                       if MidiMessageTypeIdentifaction.isChannelMessage status then
                         triggerMessageEvent channelMessage platformEvents.NoticeChannelMessage
                       elif MidiMessageTypeIdentifaction.isRealtimeMessage status then
@@ -167,9 +156,9 @@ type RtMidiMidinettePlatformImpl() as this =
                         | None ->
                             sysexParts.Add bytes
                       else
-                        #if DEBUG
-                        failwithf "unable to parse what I received received %A" bytes
-                        #endif
+                        failwithf "unable to parse received data: %A" bytes
+                        
+                    // note: InputDevice member is only defined in smoothdeveloper/RtMidi.Core fork
                     port.InputDevice.Message.Add(onBytes)
                     let inEvents = {error = error; channelMessage = channelMessage; sysex = sysex; systemMessage = systemMessage; realtimeMessage = realtimeMessage }
                     Some ({ inPort = port; info = rtDevice; inEvents = inEvents } :> _)

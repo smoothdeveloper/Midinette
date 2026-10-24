@@ -2,42 +2,42 @@ namespace rec Midi
 open FSharp.UMX
 open MidiMessageTypeIdentifaction
 [<Struct>]
-type MidiNote = 
+type MidiNoteName = 
 
-  | MidiNote of byte
+  | MidiNoteName of byte<midinote>
 
-  static member c      = MidiNote 00uy
-  static member cSharp = MidiNote 01uy
-  static member d      = MidiNote 02uy
-  static member dSharp = MidiNote 03uy
-  static member e      = MidiNote 04uy
-  static member f      = MidiNote 05uy
-  static member fSharp = MidiNote 06uy
-  static member g      = MidiNote 07uy
-  static member gSharp = MidiNote 08uy
-  static member a      = MidiNote 09uy
-  static member aSharp = MidiNote 10uy
-  static member b      = MidiNote 11uy
+  static member c      = MidiNoteName (UMX.tag 00uy)
+  static member cSharp = MidiNoteName (UMX.tag 01uy)
+  static member d      = MidiNoteName (UMX.tag 02uy)
+  static member dSharp = MidiNoteName (UMX.tag 03uy)
+  static member e      = MidiNoteName (UMX.tag 04uy)
+  static member f      = MidiNoteName (UMX.tag 05uy)
+  static member fSharp = MidiNoteName (UMX.tag 06uy)
+  static member g      = MidiNoteName (UMX.tag 07uy)
+  static member gSharp = MidiNoteName (UMX.tag 08uy)
+  static member a      = MidiNoteName (UMX.tag 09uy)
+  static member aSharp = MidiNoteName (UMX.tag 10uy)
+  static member b      = MidiNoteName (UMX.tag 11uy)
 
-  static member inline fromByte b = MidiNote (b % 12uy)
-  static member inline op_Explicit (MidiNote(n)) = n
+  static member inline fromByte b = MidiNoteName (UMX.tag (b % 12uy))
+  static member inline op_Explicit (MidiNoteName(n)) = UMX.untag n
 
-  override x.ToString () = MidiNote.getName x
+  override x.ToString () = MidiNoteName.getName x
 
 [<RequireQualifiedAccess>]
-module MidiNote =
-  let inline (|C|_|)      v = if byte v = byte MidiNote.c      then Some () else None 
-  let inline (|CSharp|_|) v = if byte v = byte MidiNote.cSharp then Some () else None 
-  let inline (|D|_|)      v = if byte v = byte MidiNote.d      then Some () else None 
-  let inline (|DSharp|_|) v = if byte v = byte MidiNote.dSharp then Some () else None 
-  let inline (|E|_|)      v = if byte v = byte MidiNote.e      then Some () else None 
-  let inline (|F|_|)      v = if byte v = byte MidiNote.f      then Some () else None 
-  let inline (|FSharp|_|) v = if byte v = byte MidiNote.fSharp then Some () else None 
-  let inline (|G|_|)      v = if byte v = byte MidiNote.g      then Some () else None 
-  let inline (|GSharp|_|) v = if byte v = byte MidiNote.gSharp then Some () else None 
-  let inline (|A|_|)      v = if byte v = byte MidiNote.a      then Some () else None 
-  let inline (|ASharp|_|) v = if byte v = byte MidiNote.aSharp then Some () else None 
-  let inline (|B|_|)      v = if byte v = byte MidiNote.b      then Some () else None 
+module MidiNoteName =
+  let inline (|C|_|)      v = if byte v = byte MidiNoteName.c      then Some () else None 
+  let inline (|CSharp|_|) v = if byte v = byte MidiNoteName.cSharp then Some () else None 
+  let inline (|D|_|)      v = if byte v = byte MidiNoteName.d      then Some () else None 
+  let inline (|DSharp|_|) v = if byte v = byte MidiNoteName.dSharp then Some () else None 
+  let inline (|E|_|)      v = if byte v = byte MidiNoteName.e      then Some () else None 
+  let inline (|F|_|)      v = if byte v = byte MidiNoteName.f      then Some () else None 
+  let inline (|FSharp|_|) v = if byte v = byte MidiNoteName.fSharp then Some () else None 
+  let inline (|G|_|)      v = if byte v = byte MidiNoteName.g      then Some () else None 
+  let inline (|GSharp|_|) v = if byte v = byte MidiNoteName.gSharp then Some () else None 
+  let inline (|A|_|)      v = if byte v = byte MidiNoteName.a      then Some () else None 
+  let inline (|ASharp|_|) v = if byte v = byte MidiNoteName.aSharp then Some () else None 
+  let inline (|B|_|)      v = if byte v = byte MidiNoteName.b      then Some () else None 
   let getName note =
     let twelve = 
       LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne + LanguagePrimitives.GenericOne 
@@ -113,7 +113,7 @@ type [<Struct>] MidiMessage private(value:int) =
   static member NoteWithOctave (note: MidiNote) (octave: byte) = (octave * 12uy) + (byte note)
   static member GetNoteAndOctave (midiNoteNumber: byte) =
     let octave = midiNoteNumber / 12uy
-    let note = MidiNote.fromByte midiNoteNumber
+    let note = MidiNoteName.fromByte midiNoteNumber
     note, octave
 
   static member Encode (status: byte<_>) (data1: byte<_>) (data2: byte<_>) =

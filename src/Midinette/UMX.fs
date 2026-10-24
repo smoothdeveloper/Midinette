@@ -11,6 +11,10 @@ type byte_7bits   = byte<bits7'>
 type byte_8bits   = byte<bits8'>
 type short_14bits = byte<bits7'>
 
+type [<Measure>] midicc
+type [<Measure>] cent
+type [<Measure>] midinote
+type MidiNote = byte<midinote>
 type UMX =
   static member inline untag_byte_7bits (byte: byte_7bits)   : byte = unbox byte
   static member inline untag_byte_7bits (byte: byte_7bits array)   : byte array = unbox byte
@@ -26,6 +30,7 @@ type UMX =
   static member inline tag_sysex_data (byte: byte)        : byte<sysex'>     = unbox byte
   static member inline tag_sysex_data (byte: Event<byte array>) : Event<byte<sysex'>> = unbox byte
   
+  static member inline tag_cent (cent: decimal) = LanguagePrimitives.DecimalWithMeasure<cent> cent
   static member inline to_byte_7bits(sysex: sysex_data)    : byte_7bits array = unbox sysex
   static member inline to_byte_7bits(sysex: byte<_>)       : byte_7bits       = unbox sysex
   static member inline to_sysex_data(sysex: byte<_>)       : byte<sysex'>     = unbox sysex

@@ -1,5 +1,154 @@
 ﻿module Midi.Tuning
+open FSharp.UMX
 open Midinette.Platform
+
+
+module Internals =
+  
+  // adapted from github.com/surge-synthesizer/tuning-library
+  
+  type Tone =
+    | ToneRatio of top: uint * bottom: uint
+    | ToneCents of cents: decimal<cent>
+
+  module Tone =
+    let fromString (toneString: string) =
+      let inline parseUint (toParse:string) = System.UInt32.TryParse toParse 
+      if toneString.Contains "." then
+        let inline parseDecimal (toParse:string) = System.Decimal.TryParse toParse 
+        match parseDecimal toneString with
+        | true, tone -> tone |> UMX.tag_cent |> ToneCents |> Some
+        | _ -> None
+      elif toneString.Contains "/" then
+        match toneString.Split '/' with
+        | [|top;bottom|] ->
+          match parseUint top, parseUint bottom with
+          | (true, top), (true, bottom) -> Some (ToneRatio(top, bottom))
+          | _ -> None
+        | _ -> None
+      else
+        match parseUint toneString with
+        | true, top -> Some (ToneRatio(top, 1u))
+        | _ -> None
+
+    let centsForTone tone =
+      match tone with
+      | ToneCents cents -> cents
+      | ToneRatio(top,0u) -> failwith $"tone ratio with 0 as divisor %A{top}"
+      | ToneRatio(top,bottom) ->
+        // 2^(cents/1200) = n/d
+        // cents = 1200 * log(n/d) / log(2)
+        let cents = 1200. * log (float (top / bottom)) / log (2.0)
+        let cents = decimal cents
+        LanguagePrimitives.DecimalWithMeasure<cent> cents
+      
+    let floatValue tone =
+      let cents = centsForTone tone
+      (UMX.untag cents / 1200m) + 1m
+  /// The Scale is the representation of the SCL file. It contains several key
+  /// features. Most importantly it has a count and a vector of Tones.
+  ///
+  /// In most normal use, you will simply pass around instances of this class
+  /// to a Tunings::Tuning instance, but in some cases you may want to create
+  /// or inspect this class yourself. Especially if you are displaying this
+  /// class to your end users, you may want to use the rawText or count methods.
+  type Scale =
+    {
+      /// The name in the SCL file. Informational only
+      name: string
+      /// The description in the SCL file. Informational only
+      description: string
+      /// The raw text of the SCL file used to create this Scale
+      rawText: string
+      /// The number of tones.
+      count: int
+      /// The tones
+      tones: Tone array
+    }
+    static member atMidiKey (midiNote: MidiNote) scale =
+      // API note: this is unsafe since Scale.tones can currently be initialized arbitrarily.
+      scale.tones.[int midiNote]
+  
+  /// The KeyboardMapping class represents a KBM file. In most cases, the salient
+  /// features are the tuningConstantNote and tuningFrequency, which allow you to
+  /// pick a fixed note in the midi keyboard when retuning. The KBM file can also
+  /// remap individual keys to individual points in a scale, which here is done with the
+  /// keys vector.
+  ///
+  /// Just as with Scale, the rawText member contains the text of the KBM file used.
+  type KeyboardMapping = {
+    count              : int
+    firstMidi          : int
+    lastMidi           : int
+    middleNote         : int
+    tuningConstantNote : int
+    tuningFrequency    : decimal
+    tuningPitch        : decimal
+    keys               : int array
+    rawText            : string
+    name               : string
+  }
+//  type Tuning = Tuning of int
+
+  module SCLParser =
+    type SCLItem =
+      | Comment of comment: string
+      | ScaleName of scaleName: string
+      | ToneCount of toneCount: byte
+      | ToneAsCent of cents: decimal
+      | ToneAsRatio of top: uint * bottom: uint
+      
+    type ParserResult =
+      | Parsed of items: SCLItem array
+      
+    let parse (reader: System.IO.TextReader) =
+      let mutable line = reader.ReadLine()
+      let mutable lineIndex = 0
+      
+      let mutable toneCountLine = None
+      let mutable scaleNameLine = None
+      [|
+      while not (isNull line) do
+        if System.String.IsNullOrWhiteSpace line then
+          ()
+        elif line.StartsWith "!" then
+          Comment (line.Substring(1))
+        else
+          match scaleNameLine with
+          | None ->
+            printfn $"scale name: {scaleNameLine}"
+            scaleNameLine <- Some (lineIndex, line)
+            ScaleName line
+          | Some _ ->
+            let invariantCulture = System.Globalization.CultureInfo.InvariantCulture
+            match toneCountLine with
+            | None ->
+              match System.Byte.TryParse(line, System.Globalization.NumberStyles.Number, invariantCulture) with
+              | true, toneCount ->
+                toneCountLine <- Some(lineIndex, toneCount)
+                ToneCount toneCount
+              | false, _ -> failwith $"don't know what to do of '{scaleNameLine}, {line}'"
+            | Some _ ->
+              match System.Decimal.TryParse(line, System.Globalization.NumberStyles.Number, invariantCulture) with
+              | true, value ->
+                ToneAsCent value
+              | false, _ ->
+                match line.Split '/' with
+                | [|top;bottom|] ->
+                  match System.UInt32.TryParse top, System.UInt32.TryParse bottom with
+                  | (true, top), (true, bottom) ->
+                    ToneAsRatio(top, bottom)
+                    | _ -> failwith $"don't know what to do of '{line}'"
+                | _ -> failwith $"don't know what to do of '{line}'"
+      
+        line <- reader.ReadLine()
+        lineIndex <- lineIndex + 1
+        
+      |]
+
+
+
+
 // based on specs from midi.org
 // additional spec: http://www.somascape.org/midi/tech/spec.html#usx7E0800
 type MessageId =
@@ -142,3 +291,4 @@ with
       (*
 
 *)
+

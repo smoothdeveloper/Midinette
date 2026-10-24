@@ -2,8 +2,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <OutputPath>..\..\build\$(Configuration)\$(Platform)</OutputPath>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.fs" />
@@ -13,7 +14,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ElektronControl\ToolLib\ToolLib.fsproj" />
+    <!--<ProjectReference Include="..\..\..\ElektronControl\ToolLib\ToolLib.fsproj" />-->
     <ProjectReference Include="..\..\src\Midinette.Elektron\Midinette.Elektron.fsproj" />
     <ProjectReference Include="..\..\src\Midinette\Midinette.fsproj" />
   </ItemGroup>
