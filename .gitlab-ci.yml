@@ -21,7 +21,7 @@ test:linux:
     - curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
     - export PATH="$CARGO_HOME/bin:$PATH"
   script:
-    - dotnet test Midinette.slnx
+    - dotnet test midinette.slnx
 
 test:macos:
   stage: test
@@ -29,4 +29,4 @@ test:macos:
   when: manual
   allow_failure: true
   script:
-    - dotnet test Midinette.slnx
+    - dotnet test midinette.slnx
