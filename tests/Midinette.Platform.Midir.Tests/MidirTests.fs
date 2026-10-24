@@ -82,6 +82,11 @@ let native =
     }
     test "enumerate ports" {
       let p = platform.Force()
+      if OperatingSystem.IsLinux() && not (File.Exists "/dev/snd/seq") then
+        // no ALSA sequencer (containers, CI): midir cannot create a client; must fail cleanly
+        let e = Expect.throwsC (fun () -> p.InputPorts |> ignore) id
+        Expect.isTrue (e :? MidirException) (sprintf "MidirException expected, got %O" e)
+        skiptestf "no ALSA sequencer: %s" e.Message
       for port in p.InputPorts do Expect.isNotEmpty port.Id "input id"
       for port in p.OutputPorts do Expect.isNotEmpty port.Id "output id"
       let ip = p :> IMidiPlatform<int64>
