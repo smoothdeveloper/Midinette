@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/MidirMonitor/MidirMonitor.fsproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Midinette.Elektron/Midinette.Elektron.fsproj" />
     <Project Path="src/Midinette.Platform.Midir/Midinette.Platform.Midir.fsproj" />
