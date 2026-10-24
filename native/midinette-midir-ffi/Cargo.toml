@@ -1,0 +1,23 @@
+[package]
+name = "midinette-midir-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "C ABI shim over midir for Midinette.Platform.Midir (.NET)"
+publish = false
+
+[lib]
+name = "midinette_midir"
+crate-type = ["cdylib"]
+
+[features]
+default = []
+jack = ["midir/jack"]
+winrt = ["midir/winrt"]
+
+[dependencies]
+midir = "0.11"
+
+[profile.release]
+panic = "unwind"
+lto = true
