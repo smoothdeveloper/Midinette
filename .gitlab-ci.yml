@@ -1,0 +1,32 @@
+# Linux build + test. Virtual-port tests skip themselves when /dev/snd/seq is absent
+# (the usual case in containers); byte-stream, native smoke and core tests still run.
+# A macOS job needs a shell runner on a Mac (tag "macos") and is manual until one exists.
+
+stages: [test]
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+
+test:linux:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  cache:
+    key: "$CI_JOB_NAME"
+    paths: [.nuget/packages, .cargo/registry, native/midinette-midir-ffi/target]
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends curl build-essential pkg-config libasound2-dev
+    - curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+    - export PATH="$CARGO_HOME/bin:$PATH"
+  script:
+    - dotnet test Midinette.slnx
+
+test:macos:
+  stage: test
+  tags: [macos]
+  when: manual
+  allow_failure: true
+  script:
+    - dotnet test Midinette.slnx
