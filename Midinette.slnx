@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Midinette.Elektron.Tests/Midinette.Elektron.Tests.fsproj" />
+    <Project Path="tests/Midinette.Platform.Midir.Tests/Midinette.Platform.Midir.Tests.fsproj" />
     <Project Path="tests/Midinette.Tests/Midinette.Tests.fsproj" />
   </Folder>
 </Solution>
