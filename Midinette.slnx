@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Midinette.Elektron/Midinette.Elektron.fsproj" />
+    <Project Path="src/Midinette.Platform.Midir/Midinette.Platform.Midir.fsproj" />
     <Project Path="src/Midinette.Waldorf/Midinette.Waldorf.fsproj" />
     <Project Path="src/Midinette/Midinette.fsproj" />
   </Folder>
