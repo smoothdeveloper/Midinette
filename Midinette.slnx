@@ -3,14 +3,14 @@
     <Project Path="samples/MidirMonitor/MidirMonitor.fsproj" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/Midinette.Elektron/Midinette.Elektron.fsproj" />
-    <Project Path="src/Midinette.Platform.Midir/Midinette.Platform.Midir.fsproj" />
-    <Project Path="src/Midinette.Waldorf/Midinette.Waldorf.fsproj" />
-    <Project Path="src/Midinette/Midinette.fsproj" />
+    <Project Path="src/midinette.elektron/midinette.elektron.fsproj" />
+    <Project Path="src/midinette.platform.midir/midinette.platform.midir.fsproj" />
+    <Project Path="src/midinette.waldorf/midinette.waldorf.fsproj" />
+    <Project Path="src/midinette/midinette.fsproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Midinette.Elektron.Tests/Midinette.Elektron.Tests.fsproj" />
-    <Project Path="tests/Midinette.Platform.Midir.Tests/Midinette.Platform.Midir.Tests.fsproj" />
-    <Project Path="tests/Midinette.Tests/Midinette.Tests.fsproj" />
+    <Project Path="tests/midinette.elektron.tests/midinette.elektron.tests.fsproj" />
+    <Project Path="tests/midinette.platform.midir.tests/midinette.platform.midir.tests.fsproj" />
+    <Project Path="tests/midinette.tests/midinette.tests.fsproj" />
   </Folder>
 </Solution>

@@ -8,10 +8,10 @@ Midinette is a set of F# MIDI tools. It covers messages, sysex, registers and de
 
 | Path | What |
 | --- | --- |
-| `src/Midinette` | Core: `MidiMessage`, sysex helpers, `Midi.ByteStream` raw-byte parser, `IMidiPlatform` / `IVirtualMidiPlatform` (`netstandard2.0;net10.0`) |
-| `src/Midinette.Platform.Midir` | Port backend on midir via a small Rust cdylib (`net10.0`) |
+| `src/midinette` | Core: `MidiMessage`, sysex helpers, `Midi.ByteStream` raw-byte parser, `IMidiPlatform` / `IVirtualMidiPlatform` (`netstandard2.0;net10.0`) |
+| `src/midinette.platform.midir` | Port backend on midir via a small Rust cdylib (`net10.0`) |
 | `native/midinette-midir-ffi` | The Rust C-ABI shim over midir 0.11 |
-| `src/Midinette.Elektron`, `src/Midinette.Waldorf` | Device specifics |
+| `src/midinette.elektron`, `src/midinette.waldorf` | Device specifics |
 | `samples/MidirMonitor` | Lists ports, creates "Midinette In/Out" virtual ports, echoes and prints |
 | `tests/*` | Expecto test projects, run with `dotnet test` |
 
@@ -19,8 +19,8 @@ Midinette is a set of F# MIDI tools. It covers messages, sysex, registers and de
 
 ```fsharp
 open Midi
-open Midinette.Platform
-open Midinette.Platform.Midir
+open midinette.platform
+open midinette.platform.midir
 
 let midi = MidirPlatform("my app")              // client name shown by the OS
 for p in midi.InputPorts do printfn "%s" p.Name // re-enumerated on each access (hot-plug)
@@ -64,10 +64,10 @@ dotnet run --project samples/MidirMonitor -- --seconds 30
 - The Midir project runs `cargo build --release` on `native/midinette-midir-ffi` before building, then copies the native library next to the assembly.
 - To use a prebuilt shim, pass `-p:MidinetteSkipCargo=true` and drop `libmidinette_midir.{dylib,so}` / `midinette_midir.dll` into `native/midinette-midir-ffi/target/release/`.
 - Virtual-port tests (loopback, ≥64 KB sysex, 1000× open/close soak) only run where virtual ports work: macOS, and Linux with `/dev/snd/seq`. Elsewhere they are skipped.
-- Test projects are plain executables too: `dotnet run --project tests/Midinette.Platform.Midir.Tests -- --summary`.
+- Test projects are plain executables too: `dotnet run --project tests/midinette.platform.midir.tests -- --summary`.
 
 Packages are managed centrally in `Directory.Packages.props`. Paket and FAKE are gone.
 
 ## Legacy
 
-`src/Midinette.Platform.RtMidi`, `src/Midinette.Platform.PortMidi` and `src/Midinette.Fable` are kept for reference but are no longer in `Midinette.slnx` or maintained. They still reference the old paket setup. New code should use `Midinette.Platform.Midir`.
+`src/midinette.platform.rtmidi`, `src/midinette.platform.portmidi` and `src/midinette.fable` are kept for reference but are no longer in `Midinette.slnx` or maintained. They still reference the old paket setup. New code should use `midinette.platform.midir`.

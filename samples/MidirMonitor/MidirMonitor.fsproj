@@ -8,7 +8,7 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Midinette\Midinette.fsproj" />
-    <ProjectReference Include="..\..\src\Midinette.Platform.Midir\Midinette.Platform.Midir.fsproj" />
+    <ProjectReference Include="..\..\src\midinette\midinette.fsproj" />
+    <ProjectReference Include="..\..\src\midinette.platform.midir\midinette.platform.midir.fsproj" />
   </ItemGroup>
 </Project>

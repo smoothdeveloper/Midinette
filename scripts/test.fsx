@@ -1,9 +1,9 @@
 #cd __SOURCE_DIRECTORY__
 #load "../.paket/load/net5.0/fsnative.fsx"
 #load "../.paket/load/net5.0/RtMidi.Core.fsx"
-#r @"../build/Debug/AnyCPU/netstandard2.0/Midinette.dll"
-#r @"../build/Debug/AnyCPU/netstandard2.0/Midinette.Elektron.dll"
-#r @"../build/Debug/AnyCPU/netstandard2.1/Midinette.Platform.RtMidi.dll"
+#r @"../build/Debug/AnyCPU/netstandard2.0/midinette.dll"
+#r @"../build/Debug/AnyCPU/netstandard2.0/midinette.elektron.dll"
+#r @"../build/Debug/AnyCPU/netstandard2.1/midinette.platform.rtmidi.dll"
 #load @"../../ElektronControl/ToolLib/PrettyPrint.fs"
 open Elektron.MachineDrum
 open Midi
@@ -50,8 +50,8 @@ match library with
 | None -> failwithf "couldn't load rtmidi!"
 | Some library -> printfn "loaded rtmidi!"
 
-open Midinette.Platform
-let platform = Midinette.Platform.RtMidi.RtMidiMidinettePlatformImpl()
+open midinette.platform
+let platform = midinette.platform.rtmidi.RtMidiMidinettePlatformImpl()
 let iplatform = platform :> IMidiPlatform<int64>
 
 

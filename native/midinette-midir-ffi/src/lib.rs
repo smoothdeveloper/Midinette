@@ -1,4 +1,4 @@
-//! C ABI shim over `midir` for Midinette (.NET side: `Midinette.Platform.Midir`).
+//! C ABI shim over `midir` for Midinette (.NET side: `midinette.platform.midir`).
 //!
 //! Conventions
 //! - every fallible function returns an `i32` status: `0` = ok, negative = error

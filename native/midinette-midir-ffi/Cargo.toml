@@ -3,7 +3,7 @@ name = "midinette-midir-ffi"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "C ABI shim over midir for Midinette.Platform.Midir (.NET)"
+description = "C ABI shim over midir for midinette.platform.midir (.NET)"
 publish = false
 
 [lib]

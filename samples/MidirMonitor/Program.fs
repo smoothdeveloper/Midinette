@@ -7,8 +7,8 @@ module MidirMonitor.Program
 open System
 open System.Threading
 open Midi
-open Midinette.Platform
-open Midinette.Platform.Midir
+open midinette.platform
+open midinette.platform.midir
 
 [<EntryPoint>]
 let main args =
