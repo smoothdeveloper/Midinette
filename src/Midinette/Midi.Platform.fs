@@ -60,3 +60,14 @@ type MidiPlatformTrigger<'timestamp>() =
     [<CLIEvent>] member x.SysexReceived           = sysexReceived.Publish
     [<CLIEvent>] member x.RealtimeMessageReceived = realtimeMessageReceived.Publish
 
+
+/// Capability for platforms able to create virtual (software) ports that other
+/// applications can see. Check `SupportsVirtualPorts` before calling the factories.
+/// Returned ports are already open; `Close` (or `Dispose` when implemented) removes them.
+type IVirtualMidiPlatform<'timestamp> =
+  /// true when the OS/backend can create virtual ports (e.g. macOS CoreMIDI, Linux ALSA/JACK).
+  abstract member SupportsVirtualPorts : bool
+  /// Creates a virtual *input*: a destination other applications can write to, we receive.
+  abstract member CreateVirtualInput  : name: string -> IMidiInput<'timestamp>
+  /// Creates a virtual *output*: a source other applications can read from, we send.
+  abstract member CreateVirtualOutput : name: string -> IMidiOutput<'timestamp>

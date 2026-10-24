@@ -10,6 +10,7 @@
     <Compile Include="Midi.Nrpn.fs" />
     <Compile Include="Midi.Platform.fs" />
     <Compile Include="Midi.Registers.fs" />
+    <Compile Include="Midi.ByteStream.fs" />
     <Compile Include="Midi.Tuning.fs" />
     <Compile Include="Midi.Sysex.fs" />
     <Compile Include="Internals.fs" />
