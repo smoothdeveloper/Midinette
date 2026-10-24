@@ -1,4 +1,7 @@
 <Project>
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.fsproj'">
         <Deterministic>true</Deterministic>
         <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
@@ -6,4 +9,7 @@
         <WarningLevel>5</WarningLevel>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
+    <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.fsproj'">
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
 </Project>

@@ -1,11 +1,8 @@
-﻿module Midinette.Tests
-open Hopac
-open Logary.Configuration
-open Logary.Adapters.Facade
+module Midinette.Tests
 open System.IO
 open Expecto
-open Logary.Targets
 open Midi
+[<Tests>]
 let tests =
     testList "midinette"
         [
@@ -40,14 +37,4 @@ let tests =
         ]
 
 [<EntryPoint>]
-let main args =
-    let logary =
-        Config.create "MyProject.Tests" "localhost"
-        |> Config.targets [ LiterateConsole.create LiterateConsole.empty "console" ]
-        |> Config.processing (Events.events |> Events.sink ["console";])
-        |> Config.build
-        |> run
-    LogaryFacadeAdapter.initialise<Expecto.Logging.Logger> logary
-
-    
-    runTestsWithArgs defaultConfig args tests
+let main args = runTestsInAssemblyWithCLIArgs [] args

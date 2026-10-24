@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Midinette.Elektron/Midinette.Elektron.fsproj" />
+    <Project Path="src/Midinette.Waldorf/Midinette.Waldorf.fsproj" />
+    <Project Path="src/Midinette/Midinette.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Midinette.Elektron.Tests/Midinette.Elektron.Tests.fsproj" />
+    <Project Path="tests/Midinette.Tests/Midinette.Tests.fsproj" />
+  </Folder>
+</Solution>

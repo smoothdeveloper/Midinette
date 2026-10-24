@@ -26,7 +26,7 @@ let printLines items formats (output: StringBuilder) =
     
 let printGrid items formats (output: StringBuilder) =
   let a (t:string) = output.Append t |> ignore
-  let al = output.AppendLine >> ignore
+  let al (s: string) = output.AppendLine s |> ignore
   for title,_,width in formats do
     sprintf "%s\t" ((sprintf "%s" title).PadLeft(width, ' ')) |> a
   al ""

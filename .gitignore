@@ -1,9 +1,19 @@
-.paket
-.vs
-.idea
-build
-**/bin/*
-**/obj/*
-**/packages/*
-.fake
-.ionide
+# .NET
+**/bin/
+**/obj/
+**/packages/
+*.user
+.vs/
+.idea/
+.ionide/
+.fake/
+TestResults/
+# legacy paket (removed in favour of Central Package Management)
+.paket/
+paket-files/
+# build output (legacy OutputPath)
+/build/
+# Rust native shim
+native/**/target/
+# macOS
+.DS_Store
